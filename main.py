@@ -1,5 +1,5 @@
 def main():
-    print("Hello from food-delivery-etl!")
+    print("Test merge of the feature branch")
 
 
 if __name__ == "__main__":
