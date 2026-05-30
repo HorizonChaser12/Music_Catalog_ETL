@@ -2,6 +2,9 @@ from matplotlib.font_manager import json_dump
 import requests 
 import json
 
+# API I am working on user, country and location
+
+
 resp = requests.post("http://localhost:4000/v1/user/register", json={"username": "","email": "","password": ""})
 print(resp.status_code)
 print(resp.headers.get("content-type"))
