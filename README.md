@@ -1,6 +1,6 @@
-# Food Delivery ETL - Docker Example Setup
+# Food Delivery ETL - A Beginner Project for Data Engineering
 
-This repo is a shared data engineering project with my colleague Pranoti. It’s a playground for building multiple ETL pipelines using Airflow, Postgres, Spark, Redis, and a sample food delivery API.
+This repo is a shared data engineering project with my colleague [Pranoti](https://github.com/Pranoti-2002).   It’s a playground for building multiple ETL pipelines using Airflow, Postgres, Spark, Redis, and a sample food delivery API.
 
 ## What this repo is for
 
