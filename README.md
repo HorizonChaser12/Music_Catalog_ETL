@@ -84,7 +84,7 @@ We are tracking multiple DAGs here. The idea is to keep a short summary for each
 
 For the example DAG, the flow is roughly:
 
-```
+```bash
 Start
   ↓
 Fetch Countries API

@@ -1,0 +1,19 @@
+{
+  "code": "SUCCESS",
+  "message": "Country found.",
+  "country": {
+    "id": "f19249a4-0b66-4ae9-be67-7d9f9ea9069f",
+    "createdDate": "2026-05-30T18:24:01.991Z",
+    "updatedDate": "2026-05-30T18:24:01.991Z",
+    "name": "United States",
+    "code": "US",
+    "emoji": "\ud83c\uddfa\ud83c\uddf8",
+    "createdBy": {
+      "id": "d6b2fa20-83e7-4e19-a056-1d6f4b6b4105",
+      "createdDate": "2026-05-30T18:24:01.991Z",
+      "updatedDate": "2026-05-30T18:24:01.991Z",
+      "email": "john@delivery.com",
+      "username": "john"
+    }
+  }
+}
