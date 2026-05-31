@@ -8,6 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
-docker-compose.yml
-Dockerfile
-entrypoint.sh
+
+
+
+logs
+data
