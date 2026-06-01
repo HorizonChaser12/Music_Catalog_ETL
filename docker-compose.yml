@@ -9,8 +9,38 @@ services:
       POSTGRES_DB: airflow
     ports:
       - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
+
+  food-delivery-api:
+    image: node:18
+    container_name: food-delivery-api
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      SERVER_PORT: 4000
+      SERVER_HOST: 0.0.0.0
+      API_VERSION: /v1
+      SESSION_ID: session-id
+      SESSION_SECRET: session-secret
+      REDIS_DB_HOST: redis
+      REDIS_DB_PORT: 6379
+      DATABASE_DIALECT: postgres
+      DATABASE_USER: airflow
+      DATABASE_PASSWORD: airflow
+      DATABASE_DB: airflow
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+    command: bash -c "git clone https://github.com/evanigwilo/food-delivery-api.git . && cp .env.example .env && npm install --legacy-peer-deps && npm run development"
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
 
   airflow-webserver:
     build: .
@@ -30,8 +60,6 @@ services:
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql
-      - ./data:/opt/project/data
-      - ./logs:/opt/airflow/logs
     ports:
       - "8082:8080"
     command: webserver
@@ -54,8 +82,6 @@ services:
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql
-      - ./data:/opt/project/data
-      - ./logs:/opt/airflow/logs
     command: scheduler
 
   spark-master:
@@ -97,4 +123,3 @@ services:
 volumes:
   pgadmin-data:
     driver: local
-  postgres-data:  
