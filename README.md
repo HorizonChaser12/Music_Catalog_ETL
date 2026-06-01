@@ -1,13 +1,13 @@
-# Food Delivery ETL - A Beginner Project for Data Engineering
+# Music Catalog ETL - A Beginner Project for Data Engineering
 
-This repo is a shared data engineering project with my colleague [Pranoti](https://github.com/Pranoti-2002).   It’s a playground for building multiple ETL pipelines using Airflow, Postgres, Spark, Redis, and a sample food delivery API.
+This repo is a shared data engineering project with my colleague [Pranoti](https://github.com/Pranoti-2002). It’s a playground for building multiple ETL pipelines using Airflow, Postgres, Spark, Redis, and a sample **MusicBrainz API**.
 
 ## What this repo is for
 
 This project is meant to capture a few different pipeline ideas in one place:
 
 - orchestration using Airflow DAGs
-- ingestion from a sample food delivery API
+- ingestion from the **MusicBrainz API**
 - transformation logic in Python and Spark
 - analytics storage in PostgreSQL
 - local development with Docker Compose
@@ -28,7 +28,7 @@ It’s designed around a few core ideas:
 
 - `docker-compose.yml` defines the runtime stack for local development and testing.
 - `airflow/dags/` contains DAG definitions and task orchestration logic.
-- `ingestion/` contains the code for pulling data from the sample API.
+- `ingestion/` contains the code for pulling data from the **MusicBrainz API**.
 - `transformations/` contains the cleaning, joining, and prep logic.
 - `PostgreSQL` is the main analytics store for processed results.
 - `Spark` is there to support future scalable processing, even if the current pipeline is small.
@@ -36,7 +36,7 @@ It’s designed around a few core ideas:
 ### Data flow diagram
 
 ```text
-[Food Delivery API] ---> [Airflow DAG / scheduler]
+[MusicBrainz API] ---> [Airflow DAG / scheduler]
          |                     |
          |                     v
          |             [Ingestion tasks]
@@ -63,9 +63,9 @@ This setup is meant to showcase good data engineering habits: modular services, 
 
 We are tracking multiple DAGs here. The idea is to keep a short summary for each pipeline and update it as we add more.
 
-- **User Registration Analytics Pipeline**
-  - tracks new users, locations, and country registration analytics
-  - uses the sample food delivery API as source data
+- **Music Metadata Analytics Pipeline**
+  - tracks music metadata, artist information, and album details
+  - uses the **MusicBrainz API** as source data
   - stores cleaned output in PostgreSQL
   - current status: example pipeline in `airflow/dags`
 
@@ -87,15 +87,15 @@ For the example DAG, the flow is roughly:
 ```bash
 Start
   ↓
-Fetch Countries API
+Fetch Artist Data from MusicBrainz API
   ↓
-Fetch Locations API
+Fetch Album Data from MusicBrainz API
   ↓
-Fetch Users API
+Fetch Track Data from MusicBrainz API
   ↓
 Transform & clean data
   ↓
-Join users with country/location
+Join tracks with albums and artists
   ↓
 Store into PostgreSQL
   ↓
@@ -145,7 +145,7 @@ End
    - Airflow webserver: `http://localhost:8082`
    - Spark master UI: `http://localhost:8080`
    - pgAdmin: `http://localhost:5050`
-   - Food delivery API: `http://localhost:4000`
+   - MusicBrainz API: `http://localhost:4000`
 
 To stop the stack:
 
