@@ -3,50 +3,25 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres
+
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+
     ports:
       - "5432:5432"
 
-  food-delivery-api:
-    image: node:18
-    container_name: food-delivery-api
-    working_dir: /app
-    environment:
-      NODE_ENV: development
-      SERVER_PORT: 4000
-      SERVER_HOST: 0.0.0.0
-      API_VERSION: /v1
-      SESSION_ID: session-id
-      SESSION_SECRET: session-secret
-      REDIS_DB_HOST: redis
-      REDIS_DB_PORT: 6379
-      DATABASE_DIALECT: postgres
-      DATABASE_USER: airflow
-      DATABASE_PASSWORD: airflow
-      DATABASE_DB: airflow
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-    ports:
-      - "4000:4000"
-    depends_on:
-      - postgres
-      - redis
-    command: bash -c "git clone https://github.com/evanigwilo/food-delivery-api.git . && cp .env.example .env && npm install --legacy-peer-deps && npm run development"
-
-  redis:
-    image: redis:7
-    container_name: redis
-    ports:
-      - "6379:6379"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
   airflow-webserver:
     build: .
     container_name: airflow-webserver
+
     depends_on:
       - postgres
+
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -54,21 +29,33 @@ services:
       AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
       AIRFLOW_HOME: /opt/airflow
       PYTHONPATH: /opt/project
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+
+      SPARK_MASTER_URL: spark://spark-master:7077
+
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./ingestion:/opt/project/ingestion
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql
+      - ./data:/opt/project/data
+      - ./logs:/opt/airflow/logs
+
     ports:
       - "8082:8080"
+
     command: webserver
 
   airflow-scheduler:
     build: .
     container_name: airflow-scheduler
+
     depends_on:
       - postgres
+
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -76,50 +63,74 @@ services:
       AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
       AIRFLOW_HOME: /opt/airflow
       PYTHONPATH: /opt/project
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+
+      SPARK_MASTER_URL: spark://spark-master:7077
+
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./ingestion:/opt/project/ingestion
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql
+      - ./data:/opt/project/data
+      - ./logs:/opt/airflow/logs
+
     command: scheduler
 
   spark-master:
     image: apache/spark:latest
     container_name: spark-master
+
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.master.Master
+
     ports:
-      - "8080:8080"
       - "7077:7077"
+      - "8080:8080"
+
+    volumes:
+      - ./data:/opt/project/data
 
   spark-worker:
     image: apache/spark:latest
     container_name: spark-worker
+
     depends_on:
       - spark-master
+
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
+
     environment:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_MEMORY=2G
 
+    volumes:
+      - ./data:/opt/project/data
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
+
     depends_on:
       - postgres
+
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: admin
+
     ports:
       - "5050:80"
+
     volumes:
       - pgadmin-data:/var/lib/pgadmin
 
 volumes:
+  postgres-data:
   pgadmin-data:
-    driver: local

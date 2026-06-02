@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import pendulum
-from ingestion import ingest_country_data
 from airflow.operators.empty import EmptyOperator
 
 
@@ -24,7 +23,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id = "country_user_gen",
+    dag_id = "test_dag",
     default_args = default_args,
     description = 'DAG to find new users based on user location and country wise registration',
     schedule = '0 15 * * *',
@@ -32,11 +31,9 @@ with DAG(
  ) as dag:
     
     #ingestion of user data
-    ingested_data = PythonOperator(
-    task_id='ingest_country_data',
-    python_callable=ingest_country_data.get_country_data  # or whatever function you want to call
-    )
+    ingested_data = EmptyOperator(task_id = 'start')
     empty_operator = EmptyOperator(task_id = 'end')
+    
     
     # Dependencies
     ingested_data >> empty_operator
