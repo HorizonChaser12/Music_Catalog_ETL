@@ -2,7 +2,7 @@ services:
 
   postgres:
     image: postgres:15
-    container_name: postgres
+    container_name: postgres-airflow
 
     environment:
       POSTGRES_USER: airflow
@@ -14,6 +14,21 @@ services:
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
+
+  postgres-etl:
+    image: postgres:15
+    container_name: postgres-etl
+
+    environment:
+      POSTGRES_USER: etl
+      POSTGRES_PASSWORD: etl
+      POSTGRES_DB: music_catalog
+
+    ports:
+      - "5434:5432"
+
+    volumes:
+      - postgres-etl-data:/var/lib/postgresql/data
 
   airflow-webserver:
     build: .
@@ -133,4 +148,5 @@ services:
 
 volumes:
   postgres-data:
+  postgres-etl-data:
   pgadmin-data:
