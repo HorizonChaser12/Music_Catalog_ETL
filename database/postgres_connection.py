@@ -4,7 +4,7 @@ def get_connection():
     return psycopg2.connect(
         host="postgres",
         port=5432,
-        database="postgres", #postgres for now, need to create project specific database later
+        database="postgres",
         user="airflow",
         password="airflow"
     )
