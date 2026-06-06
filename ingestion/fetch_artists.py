@@ -1,6 +1,7 @@
 import requests
 import json
 from datetime import datetime
+import time
 
 url="https://musicbrainz.org/ws/2/artist"
 artists = [
@@ -24,10 +25,20 @@ for artist in artists:
     response = requests.get(url,params=params,headers=headers)
     if response.status_code == 200:
         data = response.json()
-        all_artists.extend(data["artists"])
+        for artist_data in data["artists"]:
+            all_artists.append({
+                "artist_id": artist_data.get("id"),
+                "name": artist_data.get("name"),
+                "country": artist_data.get("country"),
+                "gender": artist_data.get("gender"),
+                "score": artist_data.get("score")
+            })
+    else:
+        print(f"Failed to fetch data for {artist}. Status code: {response.status_code}")
+    time.sleep(1)  # Sleep for 1 second to respect rate limits
 
 current_date = datetime.now().strftime("%Y_%m_%d")
-file_path = f"data/raw/artists/artists_{current_date}.json"
+file_path = f"/opt/project/data/raw/artists/artists_{current_date}.json"
 
 try:
     with open(file_path,"w") as file:
