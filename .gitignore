@@ -13,3 +13,6 @@ wheels/
 
 logs
 data
+
+# Ignore the project flow document
+docs/Music_Analytics_ELT_Project_Roadmap_v2.txt 
