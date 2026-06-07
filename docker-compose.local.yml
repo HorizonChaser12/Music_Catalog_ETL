@@ -38,7 +38,7 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./database:/opt/airflow/database
+      - ./loading:/opt/project/loading
 
     ports:
       - "8082:8080"
@@ -72,7 +72,7 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./database:/opt/airflow/database
+      - ./loading:/opt/project/loading
     command: scheduler
 
   spark-master:
