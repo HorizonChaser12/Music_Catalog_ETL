@@ -1,6 +1,7 @@
 from fetch_artists import fetch_artists
 from fetch_release import fetch_releases
 from fetch_recording import fetch_recordings
+from fetch_urls import fetch_urls
 import logging
 
 logging.basicConfig(
@@ -15,4 +16,6 @@ if __name__=="__main__":
     fetch_releases()
     logging.info("Starting data fetching process for recordings")
     fetch_recordings()
+    logging.info("Starting data fetching process for urls")
+    fetch_urls()
 

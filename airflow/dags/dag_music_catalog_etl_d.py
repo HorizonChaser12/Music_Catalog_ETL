@@ -37,6 +37,10 @@ with DAG(
         task_id="load_lnd_recordings",
         bash_command="python3 /opt/project/loading/load_recordings.py"
     )
-    extract_api_data >>[load_lnd_artists, load_lnd_releases, load_lnd_recordings]
+    load_lnd_urls=BashOperator(
+        task_id="load_lnd_urls",
+        bash_command="python3 /opt/project/loading/load_urls.py"
+    )
+    extract_api_data >>[load_lnd_artists, load_lnd_releases, load_lnd_recordings, load_lnd_urls]
 
     
