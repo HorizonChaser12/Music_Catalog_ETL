@@ -14,8 +14,8 @@ def load_releases():
        releases = json.load(file)
 
     conn = get_connection()
-    cursor = conn.cursor()
-
+    cursor = conn.cursor() 
+    cursor.execute("TRUNCATE TABLE lnd_releases") 
     for release in releases:
       cursor.execute("""INSERT INTO lnd_releases (payload) VALUES (%s)""",(json.dumps(release),)) 
 

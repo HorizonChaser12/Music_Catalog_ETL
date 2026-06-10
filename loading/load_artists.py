@@ -15,7 +15,7 @@ def load_artists():
 
     conn = get_connection()
     cursor = conn.cursor()
-
+    cursor.execute("TRUNCATE TABLE lnd_artists")
     for artist in artists:
       cursor.execute("""INSERT INTO lnd_artists (payload) VALUES (%s)""",(json.dumps(artist),)) 
 

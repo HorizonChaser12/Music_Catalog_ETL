@@ -15,7 +15,7 @@ def load_recordings():
 
     conn = get_connection()
     cursor = conn.cursor()
-
+    cursor.execute("TRUNCATE TABLE lnd_recordings") 
     for recording in recordings:
       cursor.execute("""INSERT INTO lnd_recordings (payload) VALUES (%s)""",(json.dumps(recording),)) 
 
