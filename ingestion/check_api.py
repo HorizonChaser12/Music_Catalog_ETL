@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 import logging
 import os
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -10,75 +11,47 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-url = "https://musicbrainz.org/ws/2/artist"
+headers = {
+    "User-Agent": "MusicAnalyticsETL/1.0 (suryakant.mangaraj@gmail.com)"
+}
 
-artists = [
-    "Coldplay",
-    "Lord Huron",
-    "Zara Larsson"
-    
-]
+import requests
+import json
+
+ARTIST_MBID = "cc197bad-dc9c-440d-a5b5-d52ba2e14234"  # KK
 
 headers = {
     "User-Agent": "MusicAnalyticsETL/1.0 (suryakant.mangaraj@gmail.com)"
 }
 
-all_artists = []
+url = "https://musicbrainz.org/ws/2/release"
 
-try:
-    for artist in artists:
+params = {
+    "artist": ARTIST_MBID,
+    "fmt": "json",
+    "limit": 100
+}
 
-        params = {
-            "query": f'artist:"{artist}"',
-            "fmt": "json",
-            "limit": 1
-        }
+response = requests.get(
+    url,
+    params=params,
+    headers=headers,
+    timeout=30
+)
 
-        logger.info(f"Fetching {artist}")
+data = response.json()
 
-        response = requests.get(
-            url,
-            params=params,
-            headers=headers,
-            timeout=30
-        )
+releases = []
 
-        response.raise_for_status()
+for release in data.get("releases", []):
 
-        data = response.json()
+    releases.append({
+        "release_id": release.get("id"),
+        "artist_id": ARTIST_MBID,
+        "title": release.get("title"),
+        "date": release.get("date"),
+        "country": release.get("country"),
+        "status": release.get("status")
+    })
 
-        if not data.get("artists"):
-            logger.warning(f"No result found for {artist}")
-            continue
-
-        artist_data = data["artists"][0]
-
-        cleaned_artist = {
-            "artist_id": artist_data.get("id"),
-            "artist_name": artist_data.get("name"),
-            "artist_type": artist_data.get("type"),
-            "country": artist_data.get("country"),
-            "disambiguation": artist_data.get("disambiguation"),
-            "score": artist_data.get("score")
-        }
-
-        all_artists.append(cleaned_artist)
-
-except Exception as e:
-    logger.error(f"Error: {e}")
-
-os.makedirs("data/raw/artists", exist_ok=True)
-
-current_date = datetime.now().strftime("%Y_%m_%d")
-
-file_path = f"data/raw/artists/artists_{current_date}.json"
-
-with open(file_path, "w", encoding="utf-8") as file:
-    json.dump(
-        all_artists,
-        file,
-        indent=4,
-        ensure_ascii=False
-    )
-
-logger.info(f"Saved to {file_path}")
+print(json.dumps(releases[:5], indent=4))
