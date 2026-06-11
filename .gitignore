@@ -8,8 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
-
-
+.excalidraw
+.planning.md
 
 logs
 data
