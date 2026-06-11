@@ -38,6 +38,7 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
+      - ./loading:/opt/project/loading
       - ./database:/opt/project/database
 
     ports:
@@ -72,7 +73,7 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./database:/opt/project/database
+      - ./loading:/opt/project/loading      - ./database:/opt/project/database
 
     command: scheduler
 
