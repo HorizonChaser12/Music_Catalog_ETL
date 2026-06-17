@@ -87,6 +87,7 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./ingestion:/opt/project/ingestion
+      - ./loading:/opt/project/loading
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql

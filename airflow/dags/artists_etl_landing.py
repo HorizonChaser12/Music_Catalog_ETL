@@ -1,13 +1,11 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime, timedelta
 import pendulum
 import sys
 
 sys.path.append("/opt/project")
-
-from ingestion.ingestion_artists_etl_landing import main as landing_fetch
 
 local_tz = pendulum.timezone("Asia/Kolkata")
 
@@ -30,13 +28,21 @@ with DAG(
     max_active_runs=5,
 ) as dag:
 
-    ingest_data = PythonOperator(
+    ingest_data = BashOperator(
         task_id="ingest_artist_data",
-        python_callable=landing_fetch
+        bash_command="python /opt/project/ingestion/ingestion_artists_etl_landing.py",
     )
-    load_data = PythonOperator(
-        task_id="load_artist_release_releasegroups_data",
-        python_callable=landing_load
+    load_data_artist = BashOperator(
+        task_id="load_artist_data",
+        # Pass arguments directly in the command string using f-strings
+        # Adjust paths/args based on your actual file locations
+        bash_command=f"python /opt/project/loading/load_tables_landing.py artists landing lnd_artists",
+    )
+    load_data_release = BashOperator(
+        task_id="load_release_data",
+        # Pass arguments directly in the command string using f-strings
+        # Adjust paths/args based on your actual file locations
+        bash_command=f"python /opt/project/loading/load_tables_landing.py releases landing lnd_releases",
     )
 
     end = EmptyOperator(
@@ -44,4 +50,4 @@ with DAG(
     )
 
     #dependencies
-    ingest_data >> end
+    ingest_data >> load_data_artist >> load_data_release >> end
