@@ -72,7 +72,9 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./loading:/opt/project/loading
+      - ./loading:/opt/project/loading     
+      - ./database:/opt/project/database
+
     command: scheduler
 
   spark-master:
