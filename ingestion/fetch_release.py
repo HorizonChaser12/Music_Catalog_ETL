@@ -40,7 +40,7 @@ def fetch_releases():
           logging.info(f"Fetched {release_count} releases for {artist_name}")
         else:
            logging.error(f"Failed to fetch data for {artist_name}.status code: {response.status_code}")
-        time.sleep(1)
+        time.sleep(2)
     current_date = datetime.now().strftime("%Y_%m_%d")
     file_path = f"/opt/project/data/raw/releases/releases_{current_date}.json"
 

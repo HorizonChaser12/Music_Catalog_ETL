@@ -40,7 +40,7 @@ def fetch_artists():
            logging.info(f"Fetched {artist_count} artist records for {artist_name}")
         else:
             logging.error(f"Failed to fetch data for {artist_name}. Status code: {response.status_code}")
-        time.sleep(1)  # Sleep for 1 second to respect rate limits
+        time.sleep(2)  # Sleep for 2 second to respect rate limits
 
     current_date = datetime.now().strftime("%Y_%m_%d")
     file_path = f"/opt/project/data/raw/artists/artists_{current_date}.json"

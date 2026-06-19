@@ -34,7 +34,7 @@ def fetch_recordings():
             logging.info(f"Successfully fetched recordings for release ID: {release_id}")
         else:
             logging.error(f"Failed to fetch recordings for release ID: {release_id}. Status code: {response.status_code}")
-        time.sleep(1)  # Sleep for 1 second to respect rate limits
+        time.sleep(2)  # Sleep for 2 second to respect rate limits
         
     logging.info(f"Total recording payloads collected: {len(all_recordings)}")
     current_date = datetime.now().strftime("%Y_%m_%d")

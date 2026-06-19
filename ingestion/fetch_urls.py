@@ -2,6 +2,7 @@ import requests
 import json
 from datetime import datetime
 import logging
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,9 +29,13 @@ def fetch_urls():
             "fmt":"json"
         }
         response = requests.get(url,headers=headers,params=params) 
-        data = response.json()
-        logging.info(f"Successfully fetched URLs for release ID: {release_id}")
-        all_urls.append(data)
+        if response.status_code==200:
+            data = response.json()
+            logging.info(f"Successfully fetched URLs for release ID: {release_id}")
+            all_urls.append(data)
+        else:
+            logging.info(f"Failed to fetch the data for{release_id} with status code = {response.status_code}")
+        time.sleep(2)
     logging.info(f"Finished fetching URLs for {len(releases)} releases")
     current_date = datetime.now().strftime("%Y_%m_%d")
     file_path = f"/opt/project/data/raw/urls/urls_{current_date}.json"
