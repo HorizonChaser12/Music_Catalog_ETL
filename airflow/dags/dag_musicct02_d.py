@@ -15,7 +15,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="dag_music_catalog_etl_d",
+    dag_id="dag_musicct02_d",
     description="DAG to perform ETL on music catalog data",
     start_date=datetime(2024, 6, 1),
     schedule="@daily",
