@@ -27,19 +27,19 @@ with DAG(
     )
     load_lnd_artists=BashOperator(
         task_id="load_lnd_artists",
-        bash_command="python3 /opt/project/loading/load_artists.py"
+        bash_command="python3 opt/project/loading/load_tables_landing.py artists <schema_name> <table_name>"
     )
     load_lnd_releases=BashOperator(
         task_id="load_lnd_releases",
-        bash_command="python3 /opt/project/loading/load_releases.py"
+        bash_command="python3 opt/project/loading/load_tables_landing.py "
     ) 
     load_lnd_recordings=BashOperator(
         task_id="load_lnd_recordings",
-        bash_command="python3 /opt/project/loading/load_recordings.py"
+        bash_command="python3 opt/project/loading/load_tables_landing.py"
     )
     load_lnd_urls=BashOperator(
         task_id="load_lnd_urls",
-        bash_command="python3 /opt/project/loading/load_urls.py"
+        bash_command="python3 opt/project/loading/load_tables_landing.py"
     )
     extract_api_data >>[load_lnd_artists, load_lnd_releases, load_lnd_recordings, load_lnd_urls]
 
