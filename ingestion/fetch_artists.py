@@ -51,4 +51,4 @@ def fetch_artists():
         logging.info(f"File saved successfully at {file_path}")
 
     except Exception as e:
-        logging.error(f"Error occurred while writing to file: {e}")
+        logging.error(f"Error occurred while writing to file: {e}") 
