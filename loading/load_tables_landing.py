@@ -188,6 +188,7 @@ def main():
 
         # Get table columns
         columns = get_table_details(cursor, schema_name, table_name)
+        #logger.info(f"table name is{table_name} and schema is {schema_name}")
         
         if not columns:
             logger.error("No columns found for the specified table/schema.")
