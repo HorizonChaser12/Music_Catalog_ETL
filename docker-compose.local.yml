@@ -3,6 +3,7 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres
+
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -12,15 +13,29 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  postgres-etl:
+    image: postgres:15
+    container_name: postgres-etl
+
+    environment:
+      POSTGRES_USER: etl
+      POSTGRES_PASSWORD: etl
+      POSTGRES_DB: music_catalog
+
+    ports:
+      - "5434:5432"
+
+    volumes:
+      - postgres-etl-data:/var/lib/postgresql/data
+
   airflow-webserver:
     build: .
     container_name: airflow-webserver
     depends_on:
       - postgres
-
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-123
       AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
       AIRFLOW_HOME: /opt/airflow
@@ -40,7 +55,6 @@ services:
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
       - ./loading:/opt/project/loading
-      - ./database:/opt/project/database
 
     ports:
       - "8082:8080"
@@ -50,13 +64,12 @@ services:
   airflow-scheduler:
     build: .
     container_name: airflow-scheduler
-
     depends_on:
       - postgres
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-123
       AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
       AIRFLOW_HOME: /opt/airflow
@@ -75,13 +88,13 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./loading:/opt/project/loading
+      - ./loading:/opt/project/loading     
       - ./database:/opt/project/database
 
     command: scheduler
 
   spark-master:
-    image: apache/spark:latest
+    build: ./spark
     container_name: spark-master
 
     command: >
@@ -93,10 +106,10 @@ services:
       - "7077:7077"
 
     volumes:
-      - ./data:/opt/project/data
+    - ./:/opt/project
 
   spark-worker:
-    image: apache/spark:latest
+    build: ./spark
     container_name: spark-worker
 
     depends_on:
@@ -108,11 +121,11 @@ services:
       spark://spark-master:7077
 
     environment:
-      SPARK_WORKER_CORES: 2
-      SPARK_WORKER_MEMORY: 2G
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2G
 
     volumes:
-      - ./data:/opt/project/data
+    - ./:/opt/project
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -133,4 +146,5 @@ services:
 
 volumes:
   postgres-data:
+  postgres-etl-data:
   pgadmin-data:
