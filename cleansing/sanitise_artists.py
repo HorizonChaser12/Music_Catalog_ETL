@@ -15,7 +15,7 @@ artists_df = read_table(
 artists_df.select("payload").show(1, truncate=False) 
 
 artists_schema = StructType([
-    StructField("artist_id" , StringType()),
+    StructField("id" , StringType()),
     StructField("name", StringType()),
     StructField("gender", StringType()),
     StructField("country",  StringType()),
@@ -30,10 +30,11 @@ artists_schema = StructType([
 ])
 
 artists_df = artists_df.withColumn("artists_json" , from_json("payload",artists_schema)) 
-artists_df.printSchema() 
+#artists_df.printSchema() 
+#artists_df.select("artists_json").show(1) 
 
 sanitised_artists = artists_df.select(
-    artists_df.artists_json.artist_id.alias("artist_id"),
+    artists_df.artists_json.id.alias("artist_id"),
     artists_df["artists_json"]["name"].alias("artist_name"),
     artists_df.artists_json.gender.alias("gender"),
     artists_df.artists_json.country.alias("country"),
