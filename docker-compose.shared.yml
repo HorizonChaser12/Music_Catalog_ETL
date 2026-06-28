@@ -1,3 +1,13 @@
+x-airflow-build: &airflow-build
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
+
+x-spark-build: &spark-build
+  build:
+    context: .
+    dockerfile: spark/Dockerfile
+
 services:
 
   postgres:
@@ -31,74 +41,85 @@ services:
       - postgres-etl-data:/var/lib/postgresql/data
 
   airflow-webserver:
-    build: .
+    <<: *airflow-build
     container_name: airflow-webserver
 
     depends_on:
       - postgres
+      - spark-master
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-123
       AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
-      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__HOME: /opt/airflow
       PYTHONPATH: /opt/project
 
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
 
       SPARK_MASTER_URL: spark://spark-master:7077
+      PYSPARK_PYTHON: python3
+      PYSPARK_DRIVER_PYTHON: python3
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./ingestion:/opt/project/ingestion
-      - ./loading:/opt/project/loading
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-
+      - ./loading:/opt/project/loading     
+      - ./database:/opt/project/database
+      - ./cleansing:/opt/project/cleansing
+      - ./spark:/opt/project/spark
     ports:
       - "8082:8080"
 
     command: webserver
 
   airflow-scheduler:
-    build: .
+    <<: *airflow-build
     container_name: airflow-scheduler
 
     depends_on:
       - postgres
+      - spark-master
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-123
       AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
-      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__HOME: /opt/airflow
       PYTHONPATH: /opt/project
 
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
 
       SPARK_MASTER_URL: spark://spark-master:7077
+      PYSPARK_PYTHON: python3
+      PYSPARK_DRIVER_PYTHON: python3
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./ingestion:/opt/project/ingestion
-      - ./loading:/opt/project/loading
       - ./transformations:/opt/project/transformations
       - ./configs:/opt/project/configs
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
+      - ./loading:/opt/project/loading     
+      - ./database:/opt/project/database
+      - ./cleansing:/opt/project/cleansing
+      - ./spark:/opt/project/spark
 
     command: scheduler
 
   spark-master:
-    image: apache/spark:latest
+    <<: *spark-build
     container_name: spark-master
 
     command: >
@@ -110,10 +131,11 @@ services:
       - "8080:8080"
 
     volumes:
+      - ./spark/jobs:/opt/project/spark/jobs
       - ./data:/opt/project/data
 
   spark-worker:
-    image: apache/spark:latest
+    <<: *spark-build
     container_name: spark-worker
 
     depends_on:
@@ -125,10 +147,11 @@ services:
       spark://spark-master:7077
 
     environment:
-      - SPARK_WORKER_CORES=2
-      - SPARK_WORKER_MEMORY=2G
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2G
 
     volumes:
+      - ./spark/jobs:/opt/project/spark/jobs
       - ./data:/opt/project/data
 
   pgadmin:
@@ -137,6 +160,7 @@ services:
 
     depends_on:
       - postgres
+      - postgres-etl
 
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.com

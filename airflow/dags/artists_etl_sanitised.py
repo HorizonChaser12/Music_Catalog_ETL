@@ -19,26 +19,18 @@ default_args = {
 }
 
 with DAG(
-    dag_id="artists_etl_landing",
+    dag_id="artists_etl_sanitised",
     default_args=default_args,
-    description="Landing Layer for Music Analytics Warehouse",
+    description="Sanitised Layer for Music Analytics Warehouse",
     schedule="0 15 * * *",
     catchup=False,
     dagrun_timeout=timedelta(hours=1),
     max_active_runs=5,
 ) as dag:
 
-    ingest_data = BashOperator(
-        task_id="ingest_artist_data",
-        bash_command="python /opt/project/ingestion/ingestion_artists_etl_landing.py",
-    )
-    load_data_artist = BashOperator(
-        task_id="load_artist_data",
-        bash_command=f"python /opt/project/loading/load_tables_landing.py artists landing lnd_artists",
-    )
-    load_data_release = BashOperator(
-        task_id="load_release_data",
-        bash_command=f"python /opt/project/loading/load_tables_landing.py releases landing lnd_releases",
+    clean_artist_data = BashOperator(
+        task_id="clean_artist_data",
+        bash_command="python /opt/project/cleansing/clean_artist_data.py landing lnd_artists sanitised san_artists",
     )
 
     end = EmptyOperator(
@@ -46,4 +38,4 @@ with DAG(
     )
 
     #dependencies
-    ingest_data >> load_data_artist >> load_data_release >> end
+    clean_artist_data>>end
