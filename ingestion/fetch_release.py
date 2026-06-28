@@ -26,10 +26,11 @@ def fetch_releases():
 
     all_releases = []
     for artist_name in artists:
-        params={
-        "query": f"artist:{artist_name}",
-        "fmt" : "json" 
-       }
+        params = {
+        "query": f'artist:"{artist_name}"',
+        "fmt": "json",
+        "limit": 1
+        }
         logging.info(f"Fetching data for artist: {artist_name}")
         response = requests.get(url,params=params,headers=headers)
         if response.status_code==200:
