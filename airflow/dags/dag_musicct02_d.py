@@ -1,6 +1,7 @@
 from airflow import DAG
 from airflow.operators.bash import BashOperator 
 from datetime import datetime, timedelta
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 
 # Default Args
 default_args = {
@@ -45,14 +46,15 @@ with DAG(
         cwd="/opt/project/loading",
         bash_command="python3 load_tables_landing.py urls landing lnd_urls"
     )
-    san_artists_load = BashOperator(
-        task_id='san_artists_load',
-        bash_command="""
-        /opt/spark/bin/spark-submit \
-        --master spark://spark-master:7077 \
-        /opt/project/transformation/sanitize_artists.py
-        """
-    )
-    extract_api_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load,san_artists_load]
+    san_artists_load = SparkSubmitOperator(
+    task_id="san_artists_load",
+
+    conn_id="spark_default",
+
+    application="/opt/project/transformations/sanitize_artists.py",
+
+    verbose=True
+    ) 
+    extract_api_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load] >> san_artists_load
 
     
