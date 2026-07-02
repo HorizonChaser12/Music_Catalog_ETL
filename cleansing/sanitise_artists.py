@@ -2,12 +2,18 @@ from utils.sparksession import get_spark_session
 from utils.postgres_utils import read_table
 from pyspark.sql.functions import from_json
 from pyspark.sql.types import *
+import logging
+
 
 spark = get_spark_session("sanitize_artists")
+logger = spark._jvm.org.apache.log4j.LogManager.getLogger(__name__)
+
 
 artists_df = read_table(
     spark, "landing.lnd_artists"
 )
+
+logger.info(f"Count = {artists_df.count()}")
 
 #artists_df.printSchema() 
 #artists_df.show(5)  
@@ -45,6 +51,5 @@ sanitised_artists = artists_df.select(
     "updated_at"
 )
 
-print("sanitised dataframe")
-
-sanitised_artists.show(5) 
+logger.info("Showing payload")
+artists_df.select("payload").show(1, truncate=False)

@@ -48,11 +48,9 @@ with DAG(
     )
     san_artists_load = SparkSubmitOperator(
     task_id="san_artists_load",
-
     conn_id="spark_default",
-
-    application="/opt/project/transformations/sanitize_artists.py",
-
+    application="/opt/project/cleansing/sanitise_artists.py",
+    packages="org.postgresql:postgresql:42.7.7",
     verbose=True
     ) 
     extract_api_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load] >> san_artists_load

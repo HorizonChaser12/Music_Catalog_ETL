@@ -1,6 +1,6 @@
 DB_CONFIG = {
-    "url": "jdbc:postgresql://postgres:5432/music_catalog",
-    "user": "airflow",
-    "password": "airflow",
+    "url": "jdbc:postgresql://postgres-etl:5432/music_catalog",
+    "user": "etl",
+    "password": "etl",
     "driver": "org.postgresql.Driver"
 } 
