@@ -1,21 +1,24 @@
-from fetch_artists import fetch_artists
-from fetch_release import fetch_releases
-from fetch_recording import fetch_recordings
-from fetch_urls import fetch_urls
 import logging
+
+from ingest_data import (
+    fetch_artists,
+    fetch_releases,
+    fetch_recordings,
+    fetch_urls
+)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-if __name__=="__main__":
-    logging.info("Starting data fetching process for artists") 
-    fetch_artists()
-    logging.info("Starting data fetching process for releases")
-    fetch_releases()
-    logging.info("Starting data fetching process for recordings")
-    fetch_recordings()
-    logging.info("Starting data fetching process for urls")
-    fetch_urls()
-
+if __name__ == "__main__":
+    logging.info("Starting Artist Ingestion")
+    artists = fetch_artists()
+    logging.info("Starting Release Ingestion")
+    releases = fetch_releases(artists)
+    logging.info("Starting Recording Ingestion")
+    fetch_recordings(releases)
+    logging.info("Starting URL Ingestion")
+    fetch_urls(releases)
+    logging.info("Pipeline Completed Successfully")

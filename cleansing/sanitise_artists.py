@@ -53,3 +53,4 @@ sanitised_artists = artists_df.select(
 
 logger.info("Showing payload")
 artists_df.select("payload").show(1, truncate=False)
+
