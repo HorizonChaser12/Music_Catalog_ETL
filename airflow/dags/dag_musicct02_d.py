@@ -50,9 +50,15 @@ with DAG(
     task_id="san_artists_load",
     conn_id="spark_default",
     application="/opt/project/cleansing/sanitise_artists.py",
+    application_args=[
+        "landing",
+        "lnd_artists",
+        "sanitized",
+        "san_artists"
+    ],
     packages="org.postgresql:postgresql:42.7.7",
     verbose=True
-    ) 
+    )
     extract_api_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load] >> san_artists_load
 
     
