@@ -1,4 +1,4 @@
-from utils.db_config import DB_CONFIG
+from .db_config import DB_CONFIG
 
 def read_table(spark,table_name):
 

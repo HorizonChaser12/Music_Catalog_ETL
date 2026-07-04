@@ -19,7 +19,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="artists_etl_landing",
+    dag_id="catalog_core_v1_landing",
     default_args=default_args,
     description="Landing Layer for Music Analytics Warehouse",
     schedule="0 15 * * *",
@@ -40,10 +40,21 @@ with DAG(
         task_id="load_release_data",
         bash_command=f"python /opt/project/loading/load_tables_landing.py releases landing lnd_releases",
     )
-
+    load_data_release_groups = BashOperator(
+        task_id = "load_release_groups_data",
+        bash_command=f"python /opt/project/loading/load_tables_landing.py release_groups landing lnd_release_groups",
+    )
+    landing_anr_artist = BashOperator(
+        task_id = "landing_anr_artist",
+        bash_command=f"python /opt/project/loading/utils/landing_anr.py artists landing lnd_artists",
+    )
     end = EmptyOperator(
         task_id="end"
     )
+    landing_archival = BashOperator(
+        task_id = "landing_archival_artists",
+        bash_command=f"python /opt/project/loading/utils/landing_archival.py artists,releases,release_groups",
+    )
 
     #dependencies
-    ingest_data >> load_data_artist >> load_data_release >> end
+    ingest_data >> [load_data_artist >> load_data_release >> load_data_release_groups] >> landing_anr_artist >> landing_archival >> end

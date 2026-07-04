@@ -3,6 +3,7 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime, timedelta
 import pendulum
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 import sys
 
 sys.path.append("/opt/project")
@@ -19,7 +20,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="artists_etl_sanitised",
+    dag_id="catalog_core_v1_sanitised",
     default_args=default_args,
     description="Sanitised Layer for Music Analytics Warehouse",
     schedule="0 15 * * *",
@@ -28,14 +29,25 @@ with DAG(
     max_active_runs=5,
 ) as dag:
 
-    clean_artist_data = BashOperator(
-        task_id="clean_artist_data",
-        bash_command="python /opt/project/cleansing/clean_artist_data.py landing lnd_artists sanitised san_artists",
+    start = EmptyOperator(
+        task_id="start"
     )
+    
+    clean_artist_data = SparkSubmitOperator(
+    task_id="clean_artist_data",
+    application="/opt/project/cleansing/catalog_core_v1/clean_artist_data.py",
+    conn_id= "spark-default",
+    packages="org.postgresql:postgresql:42.7.7",
+    verbose=True
+    ) 
 
+    sanitised_anr_artist = BashOperator(
+        task_id = "sanitised_anr_artist",
+        bash_command=f"python /opt/project/cleansing/utils/sanitised_anr.py landing lnd_artists sanitised san_artists",
+    )
     end = EmptyOperator(
         task_id="end"
     )
 
     #dependencies
-    clean_artist_data>>end
+    start >> clean_artist_data>> sanitised_anr_artist >> end

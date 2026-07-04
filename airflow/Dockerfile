@@ -12,12 +12,13 @@ RUN apt-get update && \
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/
 
 USER airflow
 
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r /tmp/requirements.txt
+RUN pip install --no-cache-dir \
+    --constraint https://raw.githubusercontent.com/apache/airflow/constraints-2.9.1/constraints-3.12.txt \
+    -r /tmp/requirements.txt
 
 USER root
 

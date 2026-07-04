@@ -3,7 +3,7 @@ import logging
 import sys
 import os
 import json
-from loading.postgres_connection import get_connection
+from loading.utils.postgres_connection import get_connection
 from pathlib import Path
 import re
 # Initialize logging

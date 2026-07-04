@@ -141,6 +141,63 @@ def fetch_releases(artist_list:List[str]):
     return releases
 
 
+def fetch_release_group(release_list:List[str]):
+    """_summary_
+    fetch all the release with the artists data
+    """
+    url_with_filter = url+"release-group"
+    release_groups = []
+    try:
+        for release in release_list:
+            
+            params = {
+            "artist": release,
+            "fmt": "json",
+            "limit": 100
+            }
+
+            logger.info(f"Fetching release-group for {release}")
+
+            response = requests.get(
+                url_with_filter,
+                params=params,
+                headers=headers,
+                timeout=30
+            )
+
+            response.raise_for_status()
+
+            logger.info(f"API Fetched successfully with status code: {response.status_code}")
+
+            data = response.json()
+
+            for release_group in data.get("release_groups", []):
+                release_groups.append(release_group)
+                
+                
+    except Exception as e:
+        logger.error(f"Error: {e}")
+
+    os.makedirs("opt/project/data/raw/release_groups", exist_ok=True)
+
+    current_date = datetime.now().strftime("%Y_%m_%d")
+
+    file_path = f"opt/project/data/raw/release_groups/release_groups_{current_date}.json"
+
+    logger.info(f"Saving the fetched data in {file_path}")
+    
+    with open(file_path, "w", encoding="utf-8") as file:
+        json.dump(
+            release_groups,
+            file,
+            indent=4,
+            ensure_ascii=False
+        )
+
+    logger.info(f"Saved to {file_path}")
+    
+    return release_groups
+
 def main():
     # 1. Fetch Artists
     logger.info(f"\n.......Artist Data API fetch started....... \n")
@@ -165,6 +222,11 @@ def main():
             print("No releases found.")
 
         logger.info(f"\n.......Release Data API fetch completed....... \n")
+        
+    if release_data:
+        logger.info(f"\n.......Release_Groups Data API fetch started....... \n")
+        fetch_release_group(artist_list)
+        logger.info(f"\n.......Release_Groups Data API fetch completed....... \n")        
 
     
 if __name__ == "__main__":
