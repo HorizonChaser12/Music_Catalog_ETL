@@ -3,14 +3,20 @@ from utils.postgres_utils import read_table
 from pyspark.sql.functions import from_json
 from pyspark.sql.types import *
 import logging
+import sys
 
+source_schema = sys.argv[1]
+source_table = sys.argv[2]
+
+target_schema = sys.argv[3]
+target_table = sys.argv[4]
 
 spark = get_spark_session("sanitize_artists")
 logger = spark._jvm.org.apache.log4j.LogManager.getLogger(__name__)
 
 
 artists_df = read_table(
-    spark, "landing.lnd_artists"
+    spark, f"{source_schema}.{source_table}"
 )
 
 logger.info(f"Count = {artists_df.count()}")
