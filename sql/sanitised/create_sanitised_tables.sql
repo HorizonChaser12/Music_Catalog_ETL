@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS sanitised.san_artists(
     name text NOT NULL,
     gender text,
     country text,
-    score INTEGER,
-    ingestion_date TIMESTAMP
-);
-
+    type text,
+    area_id text,
+    area_name text,
+    created_at TIMESTAMP,
+    updated_At TIMESTAMP
+)

@@ -14,7 +14,7 @@ def read_table(spark,table_name):
         .load()
     )
 
-def write_table(df, table_name):
+def write_table(df, table_name, mode="overwrite"):
     (
         df.write
         .format("jdbc")
@@ -23,6 +23,6 @@ def write_table(df, table_name):
         .option("user", DB_CONFIG["user"])
         .option("password", DB_CONFIG["password"])
         .option("driver", DB_CONFIG["driver"])
-        .mode("overwrite")
+        .mode(mode)
         .save()
-    ) 
+    )

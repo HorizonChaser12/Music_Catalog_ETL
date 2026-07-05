@@ -34,7 +34,7 @@ def discover_artists():
 
     return candidates
 
-def fetch_artists(sample_size=10):
+def fetch_artists(sample_size=2):
 
     logging.info("Discovering artists...")
     candidates = discover_artists()

@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator 
 from datetime import datetime, timedelta
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.operators.empty import EmptyOperator
 
 # Default Args
 default_args = {
@@ -16,14 +17,17 @@ default_args = {
 }
 
 with DAG(
-    dag_id="dag_musicct02_d",
+    dag_id="music_pipeline_orchestrator_d",
     description="DAG to perform ETL on music catalog data",
     start_date=datetime(2024, 6, 1),
     schedule="@daily",
     catchup=False
 ) as dag:
-    extract_api_data=BashOperator(
-        task_id="extract_api_data",
+    start_pipeline = EmptyOperator(
+    task_id="start_pipeline"
+    )
+    extract_musicbrainz_data=BashOperator(
+        task_id="extract_musicbrainz_data",
         bash_command="python3 /opt/project/loading/setup_database.py && python3 /opt/project/ingestion/fetch_all_data.py"
     )
     lnd_artists_load=BashOperator(
@@ -53,12 +57,15 @@ with DAG(
     application_args=[
         "landing",
         "lnd_artists",
-        "sanitized",
+        "sanitised",
         "san_artists"
     ],
     packages="org.postgresql:postgresql:42.7.7",
     verbose=True
     )
-    extract_api_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load] >> san_artists_load
+    end_pipeline = EmptyOperator(
+    task_id="end_pipeline"
+    )
+    start_pipeline >> extract_musicbrainz_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load] >> san_artists_load >> end_pipeline
 
     
