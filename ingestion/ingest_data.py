@@ -61,11 +61,12 @@ def fetch_artists(sample_size=2):
 
 def fetch_releases(artists):
     releases = []
+
     for artist in artists:
         artist_name = artist["name"]
         logging.info(f"Fetching releases for {artist_name}")
         params = {
-            "query": f'arid:{artist["id"]}', 
+            "query": f'arid:{artist["id"]}',
             "fmt": "json",
             "limit": 10
         }
@@ -74,15 +75,30 @@ def fetch_releases(artists):
             params=params
         )
         if data:
-            releases.extend(
-                data.get("releases", [])
-            )
+            for release in data.get("releases", []):
 
-    current_date = datetime.now().strftime("%Y_%m_%d")
-    file_path = (
-        f"/opt/project/data/raw/releases/"
-        f"releases_{current_date}.json"
-    )
+                # Save queried artist
+                release["queried_artist_id"] = artist["id"]
+
+                logging.info("=" * 80)
+                logging.info(
+                    "Queried artist : %s (%s)",
+                    artist["name"],
+                    artist["id"]
+                )
+
+                logging.info("Artist credit:")
+
+                for credit in release.get("artist-credit", []):
+                    logging.info(
+                        " - %s (%s)",
+                        credit["artist"]["name"],
+                        credit["artist"]["id"]
+                    )
+
+                print(release)
+                releases.append(release)
+
     save_json(releases, "releases", "releases")
     return releases
 

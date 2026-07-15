@@ -57,7 +57,8 @@ def insert_data(cursor, conn, columns, source_name, schema_name, table_name):
     if not columns:
         logger.warning("No columns retrieved, skipping insertion.")
         return 0
-
+    
+    logger.info("Retrived columns are:", columns)
     file_name = check_files(source_name)
     logger.info(f"Found file: {file_name}")
     

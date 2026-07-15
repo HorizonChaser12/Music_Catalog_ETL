@@ -63,9 +63,52 @@ with DAG(
     packages="org.postgresql:postgresql:42.7.7",
     verbose=True
     )
+    san_releases_load = SparkSubmitOperator(
+    task_id="san_releases_load",
+    conn_id="spark_default",
+    application="/opt/project/cleansing/sanitise_releases.py",
+    application_args=[
+        "landing",
+        "lnd_releases",
+        "sanitised",
+        "san_releases"
+    ],
+    packages="org.postgresql:postgresql:42.7.7",
+    verbose=True
+    )
+    san_recordings_load = SparkSubmitOperator(
+    task_id="san_recordings_load",
+    conn_id="spark_default",
+    application="/opt/project/cleansing/sanitise_recordings.py",
+    application_args=[
+        "landing",
+        "lnd_recordings",
+        "sanitised",
+        "san_recordings"
+    ],
+    packages="org.postgresql:postgresql:42.7.7",
+    verbose=True
+    )
     end_pipeline = EmptyOperator(
     task_id="end_pipeline"
     )
-    start_pipeline >> extract_musicbrainz_data >>[lnd_artists_load, lnd_releases_load, lnd_recordings_load, lnd_urls_load] >> san_artists_load >> end_pipeline
 
-    
+    start_pipeline >> extract_musicbrainz_data
+
+extract_musicbrainz_data >> [
+    lnd_artists_load,
+    lnd_releases_load,
+    lnd_recordings_load,
+    lnd_urls_load
+]
+
+lnd_artists_load >> san_artists_load
+
+lnd_releases_load >> san_releases_load
+lnd_recordings_load >> san_recordings_load
+
+# Foreign-key ordering
+san_artists_load >> san_releases_load
+san_releases_load >> san_recordings_load
+
+[san_recordings_load,lnd_urls_load] >> end_pipeline
