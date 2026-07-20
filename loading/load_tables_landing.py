@@ -12,11 +12,12 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+LAYER_NAME = "landing"
 
 
 def get_table_details(cursor, schema_name, table_name):
     """Fetches column names from the database."""
-    logger.info(f"Getting table information for {table_name} from Postgres...")
+    logger.info(f"[{LAYER_NAME}] Fetching table schema for {schema_name}.{table_name} from Postgres")
     query = """
         SELECT column_name
         FROM information_schema.columns
@@ -37,15 +38,15 @@ def get_table_details(cursor, schema_name, table_name):
 def check_files(source_name):
     """Find the latest JSON file for the given source."""
     raw_dir = Path(f"/opt/project/data/raw/{source_name}")
-    logger.info(f"Checking for raw_data file in {raw_dir}")
+    logger.info(f"[{LAYER_NAME}] Locating latest raw JSON file for source '{source_name}' in {raw_dir}")
     
     files = sorted(raw_dir.glob(f"{source_name}_*.json"))
 
     if files:
         latest_file = files[-1]
         file_name = latest_file.name
-        logger.info(f"Using {file_name}")
-        file_path = str(raw_dir) + "/" + file_name
+        file_path = str(latest_file)
+        logger.info(f"[{LAYER_NAME}] Selected latest raw file: {file_path}")
     else:
         raise FileNotFoundError(f"No {source_name} files found in {raw_dir}")
     
@@ -57,8 +58,6 @@ def insert_data(cursor, conn, columns, source_name, schema_name, table_name):
     if not columns:
         logger.warning("No columns retrieved, skipping insertion.")
         return 0
-    
-    logger.info("Retrived columns are:", columns)
     file_name = check_files(source_name)
     logger.info(f"Found file: {file_name}")
     
@@ -140,7 +139,7 @@ def insert_data(cursor, conn, columns, source_name, schema_name, table_name):
                     values.append(val)
                 
                 # Execute INSERT statement
-                logger.debug(f"Inserting row with values: {values}")
+                logger.debug(f"[{LAYER_NAME}] Inserting landing row with values: {values}")
                 cursor.execute(insert_sql, tuple(values))
                 success_count += 1
 
@@ -197,10 +196,10 @@ def main():
 
         # Load and insert data
         rows_affected = insert_data(cursor, conn, columns, source_name, schema_name, table_name)
-        logger.info(f"Rows affected: {rows_affected}")
+        logger.info(f"[{LAYER_NAME}] Completed landing load for {schema_name}.{table_name}: {rows_affected} rows inserted/updated")
         
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f"[{LAYER_NAME}] Fatal error: {e}")
         sys.exit(1)
     finally:
         # Cleanup
@@ -208,7 +207,7 @@ def main():
             cursor.close()
         if conn:
             conn.close()
-        logger.info("Closed Connection to Postgres")
+        logger.info(f"[{LAYER_NAME}] Closed connection to Postgres")
 
         
 if __name__ == "__main__":

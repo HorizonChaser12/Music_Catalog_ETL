@@ -14,7 +14,7 @@ default_args = {
     # "retries" : 1,
     "max_active_runs" : 5,
     "dagrun_timeout" : timedelta(hours=1),
-}
+} 
 
 with DAG(
     dag_id="music_pipeline_orchestrator_d",
@@ -61,7 +61,8 @@ with DAG(
         "san_artists"
     ],
     packages="org.postgresql:postgresql:42.7.7",
-    verbose=True
+    verbose=False,
+    conf={"spark.driver.extraJavaOptions": "-Dlog4j.configuration=file:/opt/project/configs/log4j.properties"},
     )
     san_releases_load = SparkSubmitOperator(
     task_id="san_releases_load",
@@ -74,7 +75,8 @@ with DAG(
         "san_releases"
     ],
     packages="org.postgresql:postgresql:42.7.7",
-    verbose=True
+    verbose=False,
+    conf={"spark.driver.extraJavaOptions": "-Dlog4j.configuration=file:/opt/project/configs/log4j.properties"},
     )
     san_recordings_load = SparkSubmitOperator(
     task_id="san_recordings_load",
@@ -87,13 +89,24 @@ with DAG(
         "san_recordings"
     ],
     packages="org.postgresql:postgresql:42.7.7",
-    verbose=True
+    verbose=False,
+    conf={"spark.driver.extraJavaOptions": "-Dlog4j.configuration=file:/opt/project/configs/log4j.properties"},
+    )
+    curate_data_load = SparkSubmitOperator(
+        task_id="curate_data_load",
+        conn_id="spark_default",
+        application="/opt/project/curation/curated_usecases.py",
+        packages="org.postgresql:postgresql:42.7.7",
+        verbose=False,
+        conf={"spark.driver.extraJavaOptions": "-Dlog4j.configuration=file:/opt/project/configs/log4j.properties"},
     )
     end_pipeline = EmptyOperator(
     task_id="end_pipeline"
     )
 
-    start_pipeline >> extract_musicbrainz_data
+
+    
+start_pipeline >> extract_musicbrainz_data
 
 extract_musicbrainz_data >> [
     lnd_artists_load,
@@ -111,4 +124,4 @@ lnd_recordings_load >> san_recordings_load
 san_artists_load >> san_releases_load
 san_releases_load >> san_recordings_load
 
-[san_recordings_load,lnd_urls_load] >> end_pipeline
+[san_recordings_load,lnd_urls_load] >> curate_data_load >> end_pipeline

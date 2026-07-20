@@ -13,11 +13,12 @@ source_table = sys.argv[2]
 target_schema = sys.argv[3]
 target_table = sys.argv[4]
 
-spark = get_spark_session("sanitize_releases") 
-spark.sparkContext.setLogLevel("WARN")
+spark = get_spark_session("sanitize_releases")
+spark.sparkContext.setLogLevel("ERROR")
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    force=True,
 )
 
 

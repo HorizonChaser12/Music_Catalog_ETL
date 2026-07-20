@@ -15,4 +15,6 @@ logging.info(f"Executing SQL file: /opt/project/sql/sanitised/create_sanitised_t
 execute_sql_file("/opt/project/sql/sanitised/create_sanitised_tables.sql")
 logging.info("Sanitised tables setup completed successfully")
 
-
+logging.info("Executing SQL file: /opt/project/sql/curated/create_curated_tables.sql")
+execute_sql_file("/opt/project/sql/curated/create_curated_tables.sql")
+logging.info("Curated tables setup completed successfully")

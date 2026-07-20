@@ -1,0 +1,7 @@
+artists_schema
+
+releases_schema
+
+recordings_schema
+
+urls_schema
