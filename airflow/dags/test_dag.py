@@ -1,6 +1,6 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
+from airflow.operators.bash import BashOperator
 import pendulum
 from airflow.operators.empty import EmptyOperator
 
@@ -12,7 +12,7 @@ local_tz = pendulum.timezone("Asia/Kolkata")
 default_args = {
     "owner" : "dataengineers",
     "depends_on_past" : False,
-    "email_on_failure" : True,
+    "email_on_failure" : False,
     "email_on_retry" : False,
     "email" : "suryakant.mangaraj@gmail.com",
     # "retries" : 1,
@@ -31,7 +31,11 @@ with DAG(
  ) as dag:
     
     #ingestion of user data
-    ingested_data = EmptyOperator(task_id = 'start')
+    ingested_data = BashOperator(
+        task_id = "batch_id_generation",
+        bash_command="python /opt/project/generic_scripts/batch_id_generation.py cv1 landing",
+
+    )
     empty_operator = EmptyOperator(task_id = 'end')
     
     

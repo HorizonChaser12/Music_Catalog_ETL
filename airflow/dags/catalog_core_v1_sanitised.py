@@ -43,7 +43,7 @@ with DAG(
 
     sanitised_anr_artist = BashOperator(
         task_id = "sanitised_anr_artist",
-        bash_command=f"python /opt/project/cleansing/utils/sanitised_anr.py landing lnd_artists sanitised san_artists",
+        bash_command=f"python /opt/project/generic_scripts/sanitised_anr.py landing lnd_artists sanitised san_artists",
     )
     end = EmptyOperator(
         task_id="end"

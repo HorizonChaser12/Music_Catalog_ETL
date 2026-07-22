@@ -52,7 +52,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-123
-      AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
+      AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
       AIRFLOW__HOME: /opt/airflow
       PYTHONPATH: /opt/project
 
@@ -71,7 +71,7 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./loading:/opt/project/loading     
+      - ./generic_scripts:/opt/project/generic_scripts     
       - ./database:/opt/project/database
       - ./cleansing:/opt/project/cleansing
       - ./spark:/opt/project/spark
@@ -92,7 +92,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-123
-      AIRFLOW__LOGGING__LOGGING_LEVEL: DEBUG
+      AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
       AIRFLOW__HOME: /opt/airflow
       PYTHONPATH: /opt/project
 
@@ -111,7 +111,7 @@ services:
       - ./sql:/opt/project/sql
       - ./data:/opt/project/data
       - ./logs:/opt/airflow/logs
-      - ./loading:/opt/project/loading     
+      - ./generic_scripts:/opt/project/generic_scripts     
       - ./database:/opt/project/database
       - ./cleansing:/opt/project/cleansing
       - ./spark:/opt/project/spark

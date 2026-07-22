@@ -5,16 +5,16 @@ import os
 
 # Handle imports for both module and spark-submit execution
 try:
-    from ..utils.spark_session import get_spark_session
-    from ..utils.postgres_utils import read_table, write_table
+    from ...generic_scripts.utils.spark_session import get_spark_session
+    from ...generic_scripts.utils.postgres_utils import read_table, write_table
 except ImportError:
     # When run via spark-submit, add parent directory to path
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from utils.spark_session import get_spark_session
-    from utils.postgres_utils import read_table, write_table
+    from generic_scripts.utils.spark_session import get_spark_session
+    from generic_scripts.utils.postgres_utils import read_table, write_table
 
 from pyspark.sql.functions import from_json
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, StringType
 
 
 # Initialize logging
@@ -117,7 +117,7 @@ def main():
 
     now = datetime.datetime.now()
     logger_basic.info("Script Execution Started...")
-    logger_basic.info(f"Program Start Time: {now.strftime("%H:%M:%S")}")
+    logger_basic.info(f'Program Start Time: {now.strftime("%H:%M:%S")}')
         
     select_table_df = get_table_details(spark, lan_schema_name, lan_table_name)
    
@@ -127,7 +127,7 @@ def main():
     
     logger_basic.info("Script Successfully Executed...")
     
-    logger_basic.info(f"Program End Time: {now.strftime("%H:%M:%S")}")
+    logger_basic.info(f'Program End Time: {now.strftime("%H:%M:%S")}')
     
     
 

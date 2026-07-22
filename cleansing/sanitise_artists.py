@@ -1,8 +1,8 @@
-from utils.sparksession import get_spark_session
-from utils.postgres_utils import read_table
-from utils.postgres_utils import write_table
+from generic_scripts.utils.spark_session import get_spark_session
+from generic_scripts.utils.postgres_utils import read_table
+from generic_scripts.utils.postgres_utils import write_table
 from pyspark.sql.functions import from_json
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, StringType
 import logging
 import sys
 

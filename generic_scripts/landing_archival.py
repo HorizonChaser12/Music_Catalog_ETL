@@ -1,7 +1,7 @@
 from datetime import datetime
 import logging
 import sys
-from loading.utils.postgres_connection import get_connection
+from generic_scripts.utils.postgres_connection import get_connection
 from pathlib import Path
 
 # Initialize logging
