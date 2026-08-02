@@ -1,8 +1,8 @@
-from utils.sparksession import get_spark_session
-from utils.postgres_utils import read_table
-from utils.postgres_utils import write_table
+from generic_scripts_2.utils.spark_session import get_spark_session
+from generic_scripts_2.utils.postgres_utils import read_table, write_table
 from pyspark.sql.functions import from_json
 from pyspark.sql.types import *
+from pyspark.sql.functions import lit
 import logging
 import sys
 
@@ -11,6 +11,9 @@ source_table = sys.argv[2]
 
 target_schema = sys.argv[3]
 target_table = sys.argv[4]
+batch_id = sys.argv[5]
+
+
 
 spark = get_spark_session("sanitize_artists")
 spark.sparkContext.setLogLevel("ERROR")
@@ -19,7 +22,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     force=True,
 )
-
 
 def read_sanitise_artists():
     logging.info("=" * 80)
@@ -47,6 +49,7 @@ def read_sanitise_artists():
     ])
 
     artists_df = artists_df.withColumn("artists_json" , from_json("payload",artists_schema)) 
+    
     new_artists = artists_df.select(
         artists_df.artists_json.id.alias("artist_id"),
         artists_df["artists_json"]["name"].alias("name"),
@@ -56,7 +59,8 @@ def read_sanitise_artists():
         artists_df.artists_json.area.id.alias("area_id"),
         artists_df["artists_json"]["area"]["name"].alias("area_name"),
         "created_at",
-        "updated_at"
+        "updated_at",
+        "etl_batch_id"
     )
     sanitised_artists = new_artists.join(existing, on="artist_id",how="left_anti")
     return sanitised_artists

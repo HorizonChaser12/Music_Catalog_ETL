@@ -1,7 +1,6 @@
-from utils.sparksession import get_spark_session
-from utils.postgres_utils import read_table
-from utils.postgres_utils import write_table
-from pyspark.sql.functions import col, explode, from_json
+from generic_scripts_2.utils.spark_session import get_spark_session
+from generic_scripts_2.utils.postgres_utils import read_table, write_table
+from pyspark.sql.functions import col, explode, from_json, lit
 from pyspark.sql.types import *
 import logging
 import sys
@@ -11,6 +10,7 @@ source_table = sys.argv[2]
 
 target_schema = sys.argv[3]
 target_table = sys.argv[4]
+batch_id = sys.argv[5]
 
 spark = get_spark_session("sanitise_recordings")
 spark.sparkContext.setLogLevel("ERROR")
@@ -72,6 +72,7 @@ def read_sanitise_recordings():
         explode(col("recordings_json.media")).alias("media"),
         col("created_at"),
         col("updated_at"),
+        col("etl_batch_id").alias("etl_batch_id")
     )
 
     tracks_df = media_df.select(
@@ -79,6 +80,7 @@ def read_sanitise_recordings():
         explode(col("media.tracks")).alias("track"),
         col("created_at"),
         col("updated_at"),
+        col("etl_batch_id").alias("etl_batch_id")
     )
 
     new_recordings = tracks_df.select(
@@ -94,8 +96,8 @@ def read_sanitise_recordings():
         col("track.recording.video").alias("is_video"),
         col("created_at"),
         col("updated_at"),
+        col("etl_batch_id")
     )
-
     deduped_recordings = new_recordings.dropDuplicates(["recording_id"])
 
     sanitised_recordings = (

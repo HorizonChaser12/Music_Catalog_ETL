@@ -26,6 +26,11 @@ with DAG(
     start_pipeline = EmptyOperator(
     task_id="start_pipeline"
     )
+    batch_id_generation = BashOperator(
+        task_id="batch_id_generation",
+        bash_command="python3 /opt/project/generic_scripts/batch_id_generation.py music_orchestrator landing lnd_artists,lnd_releases,lnd_recordings,",
+        do_xcom_push=True,
+    )
     extract_musicbrainz_data=BashOperator(
         task_id="extract_musicbrainz_data",
         bash_command="python3 /opt/project/loading/setup_database.py && python3 /opt/project/ingestion/fetch_all_data.py"
@@ -33,22 +38,25 @@ with DAG(
     lnd_artists_load=BashOperator(
         task_id="lnd_artists_load",
         cwd="/opt/project/loading",
-        bash_command="python3 load_tables_landing.py artists landing lnd_artists"
+        bash_command="python3 load_tables_landing.py artists landing lnd_artists {{ ti.xcom_pull(task_ids='batch_id_generation') }}"
     )
     lnd_releases_load=BashOperator(
         task_id="lnd_releases_load",
         cwd="/opt/project/loading",
-        bash_command="python3 load_tables_landing.py releases landing lnd_releases "
+        bash_command="python3 load_tables_landing.py releases landing lnd_releases {{ ti.xcom_pull(task_ids='batch_id_generation') }}"
     ) 
     lnd_recordings_load=BashOperator(
         task_id="lnd_recordings_load",
         cwd="/opt/project/loading",
-        bash_command="python3 load_tables_landing.py recordings landing lnd_recordings"
+        bash_command="python3 load_tables_landing.py recordings landing lnd_recordings {{ ti.xcom_pull(task_ids='batch_id_generation') }}"
     )
-    lnd_urls_load=BashOperator(
-        task_id="lnd_urls_load",
-        cwd="/opt/project/loading",
-        bash_command="python3 load_tables_landing.py urls landing lnd_urls"
+    landing_anr = BashOperator(
+        task_id="landing_anr",
+        bash_command="python3 /opt/project/generic_scripts/landing_anr.py artists,releases,recordings landing lnd_artists,lnd_releases,lnd_recordings music_orchestrator"
+    )
+    sanitised_anr = BashOperator(
+        task_id="sanitised_anr",
+        bash_command="python3 /opt/project/generic_scripts/sanitised_anr.py sanitised san_artists,san_releases,san_recordings sanitised san_artists,san_releases,san_recordings music_orchestrator"
     )
     san_artists_load = SparkSubmitOperator(
     task_id="san_artists_load",
@@ -58,7 +66,8 @@ with DAG(
         "landing",
         "lnd_artists",
         "sanitised",
-        "san_artists"
+        "san_artists",
+         "{{ ti.xcom_pull(task_ids='batch_id_generation') }}"
     ],
     packages="org.postgresql:postgresql:42.7.7",
     verbose=False,
@@ -72,7 +81,8 @@ with DAG(
         "landing",
         "lnd_releases",
         "sanitised",
-        "san_releases"
+        "san_releases",
+         "{{ ti.xcom_pull(task_ids='batch_id_generation') }}"
     ],
     packages="org.postgresql:postgresql:42.7.7",
     verbose=False,
@@ -86,7 +96,8 @@ with DAG(
         "landing",
         "lnd_recordings",
         "sanitised",
-        "san_recordings"
+        "san_recordings",
+         "{{ ti.xcom_pull(task_ids='batch_id_generation') }}"
     ],
     packages="org.postgresql:postgresql:42.7.7",
     verbose=False,
@@ -99,6 +110,13 @@ with DAG(
         packages="org.postgresql:postgresql:42.7.7",
         verbose=False,
         conf={"spark.driver.extraJavaOptions": "-Dlog4j.configuration=file:/opt/project/configs/log4j.properties"},
+        application_args=[
+        "{{ ti.xcom_pull(task_ids='batch_id_generation') }}"
+        ]
+    )
+    landing_archival = BashOperator(
+        task_id="landing_archival",
+        bash_command="python3 /opt/project/generic_scripts/landing_archival.py artists,releases,recordings"
     )
     end_pipeline = EmptyOperator(
     task_id="end_pipeline"
@@ -106,22 +124,25 @@ with DAG(
 
 
     
-start_pipeline >> extract_musicbrainz_data
+start_pipeline >> batch_id_generation >> extract_musicbrainz_data
 
 extract_musicbrainz_data >> [
     lnd_artists_load,
     lnd_releases_load,
-    lnd_recordings_load,
-    lnd_urls_load
-]
+    lnd_recordings_load
+] 
 
-lnd_artists_load >> san_artists_load
+lnd_artists_load >> landing_anr
+lnd_releases_load >> landing_anr
+lnd_recordings_load >> landing_anr
 
-lnd_releases_load >> san_releases_load
-lnd_recordings_load >> san_recordings_load
+
+landing_anr >> san_artists_load
+landing_anr >> san_releases_load
+landing_anr >> san_recordings_load
 
 # Foreign-key ordering
 san_artists_load >> san_releases_load
 san_releases_load >> san_recordings_load
-
-[san_recordings_load,lnd_urls_load] >> curate_data_load >> end_pipeline
+san_recordings_load >> sanitised_anr
+sanitised_anr >> landing_archival >> curate_data_load >> end_pipeline

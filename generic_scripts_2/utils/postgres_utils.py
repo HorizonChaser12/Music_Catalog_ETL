@@ -1,8 +1,7 @@
-from utils.config import DB_CONFIG
+from generic_scripts_2.utils.db_config import DB_CONFIG
 
 
-def read_table(spark,table_name):
-
+def read_table(spark, table_name):
     return (
         spark.read
         .format("jdbc")
@@ -14,7 +13,8 @@ def read_table(spark,table_name):
         .load()
     )
 
-def write_table(df, table_name, mode="overwrite"):
+
+def write_table(df, table_name, mode="append"):
     (
         df.write
         .format("jdbc")

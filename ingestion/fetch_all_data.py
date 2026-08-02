@@ -19,6 +19,4 @@ if __name__ == "__main__":
     releases = fetch_releases(artists)
     logging.info("Starting Recording Ingestion")
     fetch_recordings(releases)
-    logging.info("Starting URL Ingestion")
-    fetch_urls(releases)
     logging.info("Pipeline Completed Successfully")
