@@ -1,348 +1,1010 @@
 # Music Catalog ETL
 
-This repository implements a small batch ETL pipeline around MusicBrainz API metadata. The code pulls artist, release, and URL relationship payloads from MusicBrainz, stores them as raw JSON in the repository’s data folders, loads the landing layer into PostgreSQL, applies Spark-based cleansing, writes a sanitised layer, and produces a small curated summary table for analytics queries.
+A batch data engineering pipeline for ingesting music metadata from the MusicBrainz API, storing source payloads in PostgreSQL, transforming them with Spark, and producing sanitized and curated datasets.
 
-The project is intentionally lightweight and exploratory. It is not a production-grade warehouse in the sense of having full CI, monitoring, alerting, schema versioning, or a mature test suite. What it does have is a working project shape for a few ETL concepts: Airflow DAG orchestration, batch IDs, audit/reconciliation, JSON payload storage, PostgreSQL warehouses, and Spark transformations.
+The repository is structured as a shared ETL codebase. Common utilities are designed to be reused across pipeline sources, phases, and entity groups rather than being tied to a single developer or a single table.
 
 ## Overview
 
-The source system is the MusicBrainz public API. The pipeline reads a sample set of artist and release entities and URL relationships, then writes a local copy of the raw responses before loading them into the database.
-
-The repository is organised around a simple flow:
+The current implementation follows this general flow:
 
 ```text
 MusicBrainz API
-  -> raw JSON files under data/raw
-  -> landing tables in Postgres
-  -> Spark JSON parsing and shape-normalisation
-  -> sanitised tables in Postgres
-  -> curated summary table(s)
-  -> audit and reconciliation tables
+      |
+      v
+Raw JSON files
+      |
+      v
+Landing PostgreSQL
+      |
+      v
+Spark cleansing / transformation
+      |
+      v
+Sanitized PostgreSQL
+      |
+      v
+Curated PostgreSQL
+      |
+      v
+Analytics / downstream consumption
 ```
 
-The current implementation is centred on the `cv1` source system. The code and SQL scripts use `catalog_core_v1` naming in the folders that expose that pipeline. You can see that in the DAGs under the Airflow directory and in the source packages under `ingestion/`, `cleansing/`, and `curation/`.
+Airflow orchestrates the individual stages, while PostgreSQL stores the warehouse layers and audit information.
+
+The current implementation uses `cv1` as the configured source-system identifier and `catalog_core_v1` as the package/DAG naming used by the current pipeline. These names are implementation identifiers; the reusable scripts are parameterized so that additional source systems, phases, table groups, and entities can follow the same pattern.
 
 ## Architecture
 
-At a high level, the repository is a local containerised data stack that has three main runtime concerns:
-
-- Airflow is the orchestrator. It defines the pipeline schedule and executes shell commands that call the ETL utilities.
-- PostgreSQL is the warehouse substrate. It stores the landing, sanitised, curated, and audit tables.
-- Spark reads the landing JSON payloads from PostgreSQL, extracts structures from `JSONB`/payload columns, and writes the sanitised tables.
-
-The Docker Compose files define a small local environment with:
-
-- an Airflow metadata Postgres instance (`postgres`)
-- an ETL warehouse Postgres instance (`postgres-etl`)
-- an Airflow webserver and scheduler
-- a Spark master and worker
-- a pgAdmin UI
-
-The code is not strongly layered around interfaces or service modules. Most of the controlled movement happens through shell commands started by Airflow and Python scripts reaching directly into PostgreSQL and Spark.
-
 ```mermaid
 flowchart LR
-    API[MusicBrainz API] --> RAW[Raw JSON files\ndata/raw]
-    RAW --> LANDING_DAG[Airflow landing DAG\ncatalog_core_v1_landing]
-    LANDING_DAG --> LOAD[load_tables_landing.py]
-    LOAD --> LND[Landing Postgres schema\nlanding.lnd_*]
+    SOURCE[MusicBrainz API]
 
-    LND --> SPARK[Spark cleansing jobs\nclean_artist_data.py\nclean_release_data.py\nclean_urls_data.py]
-    SPARK --> SAN[Sanitised Postgres schema\nsanitised.san_*]
+    subgraph AIRFLOW[Apache Airflow]
+        LANDING_DAG[Landing DAG]
+        SAN_DAG[Sanitized DAG]
+        CURATION_DAG[Curation DAG]
+    end
 
-    SAN --> CURATION[Curated Spark summary\ncur_artist_discography_summary.py]
-    CURATION --> CURATED[curated.cur_artist_discography_summary]
+    subgraph RAW[Raw Layer]
+        RAW_JSON[Timestamped JSON files]
+    end
 
-    BATCH[batch_id_generation.py\naudit.batch_log] --> LANDING_DAG
-    LND --> ANR[landing_anr.py]
-    ANR --> BATCH
+    subgraph PG[PostgreSQL ETL Database]
+        LANDING[landing.*]
+        SAN[sanitised.*]
+        CURATED[curated.*]
+        AUDIT[audit.*]
+    end
 
-    SAN --> RECON[sanitised_anr.py]
-    RECON --> RECONLOG[audit.recon_log]
-    RECONLOG --> BATCHLOG[batch_log_insertion.py]
-    BATCHLOG --> BATCH
+    subgraph SPARK[Apache Spark]
+        CLEAN[Spark cleansing jobs]
+        CURATE[Spark curation jobs]
+    end
+
+    SOURCE --> RAW_JSON
+    LANDING_DAG --> RAW_JSON
+    RAW_JSON --> LANDING
+
+    LANDING_DAG --> AUDIT
+
+    LANDING --> CLEAN
+    CLEAN --> SAN
+
+    SAN --> SAN_DAG
+    SAN_DAG --> AUDIT
+
+    SAN --> CURATE
+    CURATE --> CURATED
+
+    CURATION_DAG --> CURATE
+    CURATED --> DOWNSTREAM[Analytics / Consumers]
 ```
+
+The important design point is that orchestration, transformation, storage, and audit are separate concerns:
+
+- **Airflow** controls execution order.
+- **Python utilities** handle ingestion, database loading, batch handling, archival, and reconciliation.
+- **Spark** performs JSON parsing and cleansing into relational structures.
+- **PostgreSQL** stores landing, sanitized, curated, and audit data.
+- **Raw JSON** provides a persisted copy of the extracted source payload before transformation.
 
 ## Data Flow
 
-The main operational flow is visible in the DAGs and helper scripts.
+### 1. Batch initialization
 
-1. A new batch is opened.
-   - The landing DAG calls `batch_id_generation.py`.
-   - That script inserts a row into `audit.batch_log` with a new `etl_batch_id` such as `20260730173828_cv1` and stores the batch ID in a file under `configs/`.
+Each pipeline run starts by generating an ETL batch ID.
 
-2. Source data is discovered and saved.
-   - `ingestion/catalog_core_v1/ingestion_artists_etl_landing.py` calls the MusicBrainz API through the client in `generic_scripts/utils/musicbrainz_client.py`.
-   - `discover_artists()` searches for artist names starting with random letters, filters artists with a score threshold, and selects a sample.
-   - `fetch_releases()` pulls releases for the selected artists and `fetch_urls()` follows release relationships to fetch URL payloads.
-   - Those payloads are saved to `data/raw/artists`, `data/raw/releases`, and `data/raw/urls` as timestamped JSON files.
-
-3. Landing tables are populated.
-   - Airflow runs `load_tables_landing.py` three times for artists, releases, and URLs.
-   - `load_tables_landing.py` reads the latest raw JSON file, maps columns from the destination DB table, and inserts the raw entity payloads into the landing layer.
-   - The landing schema definitions are in SQL under `sql/landing/`.
-
-4. Landing ANR validates counts.
-   - `landing_anr.py` compares the number of records found in the raw JSON file with the number of records inserted into the landing table for the current `etl_batch_id`.
-   - A success or failure is written back to `audit.batch_log` as the landing phase status.
-
-5. The raw files are pruned.
-   - `landing_archival.py` removes older JSON files and keeps a small number of recent ones.
-
-6. Spark sanitisation reads the landing layer.
-   - The `catalog_core_v1_sanitised` DAG starts three Spark applications in parallel:
-     - `clean_artist_data.py`
-     - `clean_release_data.py`
-     - `clean_urls_data.py`
-   - Each script reads from `landing.lnd_artists`, `landing.lnd_releases`, and `landing.lnd_urls`, extracts the JSON payload using a schema, and emits a flattened dataset for the sanitised layer.
-
-7. Reconciliation logs the landing-to-sanitised movement.
-   - `sanitised_anr.py` counts the rows in the landing and sanitised tables for the current batch ID and writes a row to `audit.recon_log`.
-   - `batch_log_insertion.py` summarises those reconciliation rows and updates the sanitised phase status in `audit.batch_log`.
-
-8. A curated dataset is produced.
-   - The curation DAG executes the Spark script `cur_artist_discography_summary.py`.
-   - It reads `sanitised.san_artists` and `sanitised.san_releases` and creates a curated artist/discography-style summary in `curated.cur_artist_discography_summary`.
-   - There is also a stubbed curation script for release/label summary under `curation/catalog_core_v1/cur_label_release_summary.py`, but it does not yet define a meaningful SQL aggregation.
-
-## Data Model
-
-The current warehouse layer is split across four main schema families:
-
-### Landing layer
-
-The SQL for landing setup is in [sql/landing/create_landing_tables.sql](sql/landing/create_landing_tables.sql).
-
-The landing tables are:
-
-- `landing.lnd_artists`
-- `landing.lnd_releases`
-- `landing.lnd_recordings`
-- `landing.lnd_urls`
-
-The pattern is the same for each landing table:
-
-- `id` is the table-level identifier for the source entity
-- `payload` is a PostgreSQL `JSONB` field storing the whole API payload
-- `created_at` and `updated_at` are timestamps
-- `lnd_releases` carries a `queried_artist_id` since releases are requested from an artist query
-
-The folder also has a `recordings` source path and a SQL table definition, but the active Airflow DAGs do not currently run a recordings landing load or recordings clean/sanitise pipeline.
-
-### Sanitised layer
-
-The SQL for sanitised tables is in [sql/sanitised/create_sanitised_tables.sql](sql/sanitised/catalog_core_sanitised_tables.sql) and [sql/sanitised/catalog_core_sanitised_tables.sql](sql/sanitised/catalog_core_sanitised_tables.sql).
-
-The tables are:
-
-- `sanitised.san_artists`
-- `sanitised.san_releases`
-- `sanitised.san_urls`
-
-The Spark cleaning steps flatten the original nested JSON payload into relational columns such as artist name, title, release ID, area, label, domain, and URL type. The code uses `from_json` against a Spark schema to map fields out of the stored payload JSON. In the current code, there is no `san_recordings` table written by the active DAG, even though the SQL layer defines a `san_recordings` table in one of the schema files.
-
-### Curated layer
-
-The curated model is small and derived from the sanitised layer.
-
-- `curated.cur_artist_discography_summary` is created by `cur_artist_discography_summary.py`.
-- The SQL that declares this curated table is in [sql/curated/catalog_core_curated_tables.sql](sql/curated/catalog_core_curated_tables.sql).
-
-This specific curated table is a materialised summary keyed on `artist_id` and carries columns such as totals for releases, distinct release groups, average track count, and release-date range.
-
-The repository also contains a second curated Python file for `cur_label_release_summary.py`, but it currently contains no useful SQL — it is not a real implementation yet.
-
-### Audit and reconciliation layer
-
-The audit tables are declared under [sql/audit/batch_log.sql](sql/audit/batch_log.sql) and [sql/audit/recon_log.sql](sql/audit/recon_log.sql).
-
-Important points:
-
-- `audit.batch_log` is the main batch ledger. It stores `etl_batch_id`, `phase_name`, `source_system`, `batch_status`, processed/failed counts, and error strings.
-- `audit.recon_log` stores the landing-versus-sanitised comparisons for each table group. It has specialised columns for `source_table`, `target_table`, `group_name`, and the `recon_status` flag.
-
-Audit status values are encoded as characters:
-
-- `S` = started
-- `C` = completed
-- `E` = error / failed reconciliation
-
-The batch ID is generated by `batch_id_generation.py`, written to a batch file in `configs/`, and read back by the downstream Python scripts for the same run.
-
-## Pipeline / ETL Flow
-
-The main pipeline is a batch pipeline rather than a streaming implementation.
-
-The current execution order is the one encoded in the landing DAG:
+The batch ID is created by:
 
 ```text
-batch_id_generation.py
-  -> ingestion_artists_etl_landing.py
-  -> load_tables_landing.py (artists)
-  -> load_tables_landing.py (releases)
-  -> load_tables_landing.py (urls)
-  -> landing_anr.py (artists, releases, urls)
-  -> landing_archival.py
+generic_scripts/batch_id_generation.py
 ```
 
-The sanitised DAG is then triggered separately:
+The script accepts:
 
 ```text
-Spark clean_artist_data.py
-Spark clean_release_data.py
-Spark clean_urls_data.py
-  -> sanitised_anr.py for the landing/sanitised counts
-  -> batch_log_insertion.py
+<source_system> <phase_name>
 ```
 
-The curation DAG is a separate step that reads already-sanitised data and writes the curated summary table.
+For example:
+
+```text
+python generic_scripts/batch_id_generation.py cv1 landing
+```
+
+The generated ID follows the current pattern:
+
+```text
+YYYYMMDDHHMMSS_<source_system>
+```
+
+The initial batch is recorded in:
+
+```text
+audit.batch_log
+```
+
+with status:
+
+```text
+S = Started
+C = Completed
+E = Error
+```
+
+Before creating a new batch, the utility checks for an incomplete batch for the same source system and phase. This prevents a new batch from being opened while an earlier batch is still incomplete.
+
+The generated batch ID is also written under:
+
+```text
+configs/<source_system>_batch_id.txt
+```
+
+Downstream utilities use this value to associate records with the current execution.
+
+### 2. Source ingestion
+
+The current MusicBrainz ingestion implementation is under:
+
+```text
+ingestion/catalog_core_v1/
+```
+
+The ingestion code uses the shared MusicBrainz client:
+
+```text
+generic_scripts/utils/musicbrainz_client.py
+```
+
+The current implementation discovers a sample of artists, retrieves their releases, and follows relevant release relationships to obtain URL information.
+
+The raw responses are stored under:
+
+```text
+data/raw/
+├── artists/
+├── releases/
+└── urls/
+```
+
+The exact entities processed by a pipeline are controlled by the ingestion implementation rather than being assumed globally by the framework.
+
+### 3. Landing load
+
+The reusable landing loader is:
+
+```text
+generic_scripts/load_tables_landing.py
+```
+
+It accepts parameters for the source/entity, destination schema/table, and source-system identifier.
+
+The loader:
+
+1. Reads the latest matching raw JSON file.
+2. Connects to PostgreSQL.
+3. Reads the destination table structure.
+4. Maps the source payload into the target table.
+5. Stores the original payload in the landing `JSONB` column.
+6. Associates the inserted records with the current ETL batch.
+7. Commits the load.
+
+The current landing DAG invokes the loader for:
+
+```text
+artists
+releases
+urls
+```
+
+The repository also contains recordings-related definitions, but recordings are not currently part of the active landing DAG.
+
+### 4. Landing reconciliation
+
+After landing loads complete,:
+
+```text
+generic_scripts/landing_anr.py
+```
+
+performs an audit-and-reconciliation check.
+
+The utility compares:
+
+```text
+raw JSON record count
+        vs
+landing table record count for the current batch
+```
+
+The result is written back to:
+
+```text
+audit.batch_log
+```
+
+A matching count marks the phase as completed. A mismatch marks it as failed and records the difference.
+
+### 5. Raw-file archival
+
+The landing pipeline also runs:
+
+```text
+generic_scripts/landing_archival.py
+```
+
+This removes older raw files and retains a limited recent history.
+
+This keeps raw data available for short-term reload/debugging without allowing the local raw directory to grow indefinitely.
+
+### 6. Sanitization
+
+The sanitized DAG runs Spark applications in parallel for the active entity groups:
+
+```text
+cleansing/catalog_core_v1/clean_artist_data.py
+cleansing/catalog_core_v1/clean_release_data.py
+cleansing/catalog_core_v1/clean_urls_data.py
+```
+
+Each Spark job:
+
+- reads landing data from PostgreSQL,
+- parses the stored JSON payload using a Spark schema,
+- extracts required nested fields,
+- normalizes the structure,
+- writes relational records into the sanitized schema.
+
+The current active sanitized tables are:
+
+```text
+sanitised.san_artists
+sanitised.san_releases
+sanitised.san_urls
+```
+
+### 7. Sanitized reconciliation
+
+The generic utility:
+
+```text
+generic_scripts/sanitised_anr.py
+```
+
+compares the landing and sanitized record counts for a given source table/target table pair.
+
+Its parameters are:
+
+```text
+<landing_schema>
+<landing_table>
+<sanitised_schema>
+<sanitised_table>
+<source_system>
+<group_name>
+```
+
+This allows the same reconciliation utility to be reused for multiple entity groups.
+
+The result is inserted into:
+
+```text
+audit.recon_log
+```
+
+The sanitized phase is then summarized through:
+
+```text
+generic_scripts/batch_log_insertion.py
+```
+
+which updates the corresponding batch-level audit status.
+
+### 8. Curation
+
+The current curation DAG runs:
+
+```text
+curation/catalog_core_v1/cur_artist_discography_summary.py
+```
+
+It reads sanitized artist/release data and produces:
+
+```text
+curated.cur_artist_discography_summary
+```
+
+The current summary contains artist-level discography metrics such as release counts, release-group counts, average track counts, and release-date ranges.
+
+There is also a second curation script for label/release summaries, but it is currently a placeholder rather than a complete curated implementation.
+
+## Pipeline Orchestration
+
+The repository currently has three main DAGs:
+
+| DAG | Purpose |
+|---|---|
+| `catalog_core_v1_landing` | Batch initialization, ingestion, landing load, landing reconciliation, and raw-file archival |
+| `catalog_core_v1_sanitised` | Spark cleansing and landing-to-sanitized reconciliation |
+| `catalog_core_v1_curation` | Spark-based curated dataset generation |
+| `test_dag` | Test/placeholder Airflow DAG |
+
+The current schedules are defined in the DAG files. The landing, sanitized, and curation DAGs use the same daily schedule in the current implementation.
+
+The stages are currently represented as separate DAGs rather than one DAG spanning the entire warehouse flow.
+
+## Database Model
+
+The PostgreSQL ETL database is divided into four logical schema families.
+
+### Landing
+
+```text
+landing.lnd_artists
+landing.lnd_releases
+landing.lnd_recordings
+landing.lnd_urls
+```
+
+The landing layer retains the source representation.
+
+Typical landing fields include:
+
+- source entity ID
+- `payload` as `JSONB`
+- ETL batch ID
+- creation/update timestamps
+
+`lnd_releases` also carries the artist identifier used when retrieving the release data.
+
+Recordings exist in the database model, but the current active pipeline does not process recordings through the full landing-to-sanitized flow.
+
+### Sanitized
+
+```text
+sanitised.san_artists
+sanitised.san_releases
+sanitised.san_urls
+```
+
+The sanitized layer converts nested MusicBrainz JSON into structured relational columns.
+
+Examples of fields exposed by the current transformation include:
+
+- artist name
+- artist ID
+- release title
+- release ID
+- area
+- label
+- URL
+- URL domain/type
+
+A recordings sanitized definition exists in the SQL layer, but there is currently no active recordings Spark task in the sanitized DAG.
+
+### Curated
+
+The current implemented curated output is:
+
+```text
+curated.cur_artist_discography_summary
+```
+
+It is derived from the sanitized layer and is intended for analytical consumption rather than source-level storage.
+
+### Audit
+
+Two audit tables are central to the pipeline:
+
+```text
+audit.batch_log
+audit.recon_log
+```
+
+`audit.batch_log` tracks execution at the batch/phase level.
+
+Important fields include:
+
+- `etl_batch_id`
+- `phase_name`
+- `source_system`
+- `batch_status`
+- processed record count
+- failed record count
+- error message
+- timestamps
+
+`audit.recon_log` stores table-level reconciliation results.
+
+Important fields include:
+
+- `etl_batch_id`
+- `phase_name`
+- `source_system`
+- source table
+- target table
+- group name
+- processed/failed counts
+- reconciliation status
+- timestamps
+
+## Generic ETL Design
+
+A key characteristic of the current codebase is the use of generic utilities for operations that are common across entities and pipeline groups.
+
+### Source system
+
+The source is passed as a parameter rather than embedded in the audit utilities.
+
+Current example:
+
+```text
+cv1
+```
+
+### Phase
+
+Pipeline phases are represented explicitly:
+
+```text
+landing
+sanitised
+curated
+```
+
+### Entity
+
+The landing and reconciliation utilities accept table/entity information as arguments.
+
+For example:
+
+```text
+artists
+releases
+urls
+```
+
+### Group
+
+Sanitized reconciliation supports a group identifier:
+
+```text
+group1
+```
+
+This provides a way to associate several tables that belong to the same logical processing group.
+
+The important point is that `group1` is not a hard-coded business rule in the reconciliation framework. It is supplied by the DAG and can be changed when another entity group is introduced.
+
+### Batch
+
+The ETL batch ID provides the link between stages.
+
+Conceptually:
+
+```text
+source_system
+      +
+phase
+      +
+etl_batch_id
+      |
+      +--> landing records
+      +--> sanitized records
+      +--> reconciliation results
+      +--> batch status
+```
+
+This makes the audit utilities reusable when another source system or pipeline is added.
+
+## Audit and Reconciliation
+
+The pipeline uses two levels of validation.
+
+### Landing ANR
+
+```text
+Raw file count
+      |
+      v
+Landing table count
+```
+
+The result updates `audit.batch_log`.
+
+### Sanitized ANR
+
+```text
+Landing table count
+      |
+      v
+Sanitized table count
+```
+
+The result is inserted into `audit.recon_log`.
+
+Multiple table comparisons can therefore belong to the same logical group, for example:
+
+```text
+Group 1
+├── landing.lnd_artists      -> sanitised.san_artists
+├── landing.lnd_releases     -> sanitised.san_releases
+└── landing.lnd_urls         -> sanitised.san_urls
+```
+
+A future group can use the same utility with different source/target tables and a different group identifier.
 
 ## Technology Stack
 
-This repository is not using a broad technology surface; it is using the components that are visible in code and configuration.
+| Technology | Role |
+|---|---|
+| Python | Ingestion, database utilities, audit/reconciliation, file management |
+| Apache Airflow | Pipeline orchestration |
+| PostgreSQL | Landing, sanitized, curated, and audit storage |
+| Apache Spark | JSON parsing, cleansing, and curated transformations |
+| MusicBrainz API | External metadata source |
+| Docker / Docker Compose | Local runtime environment |
+| pgAdmin | PostgreSQL administration |
 
-- Python: ingestion, orchestration helpers, API client, and database utilities
-- Apache Airflow: DAG orchestration and task execution
-- PostgreSQL: the application warehouse, landing, sanitised, curated, and audit repositories
-- Spark: DataFrame-based parsing and flattening into sanitised tables
-- MusicBrainz API: source system for the payloads
-- Docker Compose: local runtime environment
-- pgAdmin: database admin UI
-
-There is no evidence here for Kafka, DBT, Snowflake, Redis, or a complete CI/CD deployment story.
+The current repository does not show an active implementation of DBT, Kafka, Snowflake, Redis, or AWS services.
 
 ## Repository Structure
 
 ```text
 Music_Catalog_ETL/
-├── airflow/dags/                  # Airflow DAGs for landing, sanitised, curation
-├── cleansing/catalog_core_v1/     # Spark cleaning jobs for landing payloads
-├── curation/catalog_core_v1/       # Curated view/summary generation scripts
-├── data/raw/                       # Raw MusicBrainz JSON payloads by entity
-├── generic_scripts/                # Batch audit, loading, reconciliation, and DB utilities
-├── ingestion/catalog_core_v1/      # API discovery and ingestion entrypoint
-├── sql/landing                     # Landing table DDL
-├── sql/sanitised                   # Sanitised data model DDL
-├── sql/curated                     # Curated table DDL
-├── sql/audit                       # Audit and reconciliation DDL
-├── configs/                        # Current batch ID file and source-specific batch metadata
-├── spark/jobs/                     # Spark runtime workspace
-├── docker-compose.local.yml        # Primary local compose file
-└── docker-compose.shared.yml       # Duplicate Compose reference file
+├── airflow/
+│   └── dags/
+│       ├── catalog_core_v1_landing.py
+│       ├── catalog_core_v1_sanitised.py
+│       ├── catalog_core_v1_curation.py
+│       └── test_dag.py
+│
+├── ingestion/
+│   └── catalog_core_v1/
+│       └── ingestion_artists_etl_landing.py
+│
+├── generic_scripts/
+│   ├── batch_id_generation.py
+│   ├── batch_log_insertion.py
+│   ├── landing_anr.py
+│   ├── landing_archival.py
+│   ├── load_tables_landing.py
+│   ├── load_tables_sanitised.py
+│   ├── sanitised_anr.py
+│   └── utils/
+│
+├── cleansing/
+│   └── catalog_core_v1/
+│       ├── clean_artist_data.py
+│       ├── clean_release_data.py
+│       └── clean_urls_data.py
+│
+├── curation/
+│   └── catalog_core_v1/
+│       ├── cur_artist_discography_summary.py
+│       └── cur_label_release_summary.py
+│
+├── sql/
+│   ├── landing/
+│   ├── sanitised/
+│   ├── curated/
+│   └── audit/
+│
+├── data/
+│   └── raw/
+│
+├── configs/
+├── spark/
+├── transformations/
+├── tests/
+├── docker-compose.local.yml
+├── docker-compose.shared.yml
+├── entrypoint.sh
+├── pyproject.toml
+└── requirements.txt
 ```
 
-## Database and Process Notes
+The `generic_scripts/` directory is intentionally separate from the source-specific packages. Shared batch, loading, audit, and reconciliation behavior should remain reusable when another pipeline or entity group is introduced.
 
-The code is built around a small database name `music_catalog` on the PostgreSQL ETL service. The Postgres connection details are hardcoded in the helper file `generic_scripts/utils/postgres_connection.py` and `generic_scripts/utils/db_config.py`:
+## Docker Environment
 
-- host: `postgres-etl`
-- port: `5432`
-- database: `music_catalog`
-- user: `etl`
-- password: `etl`
+The Compose files define the local runtime environment.
 
-The Airflow metadata database is separate and uses the `postgres` Compose service with database `airflow` and credentials `airflow` / `airflow`.
+The stack contains:
 
-The live database was not reachable from this workspace during inspection, so the database evidence here comes from the SQL DDL, Python connection strings, and repository conventions rather than a fresh live catalogue query.
+- PostgreSQL for Airflow metadata
+- PostgreSQL for ETL/warehouse data
+- Airflow webserver
+- Airflow scheduler
+- Spark master
+- Spark worker
+- pgAdmin
+
+The ETL PostgreSQL service is named:
+
+```text
+postgres-etl
+```
+
+The database used by the ETL utilities is:
+
+```text
+music_catalog
+```
+
+The Airflow metadata database is separate.
+
+The local Compose configuration maps the primary interfaces to host ports including:
+
+```text
+Airflow: 8082
+Spark UI: 8080
+pgAdmin: 5050
+ETL PostgreSQL: 5434
+```
+
+The exact service configuration should be taken from the selected Compose file rather than assumed from the README.
 
 ## Setup
 
-The repository expects a local Docker environment.
+The repository is designed around Docker Compose.
 
-Prerequisites visible in the repo:
+Prerequisites:
 
-- Docker and Docker Compose
-- Python 3.12+ declared in the project metadata
-- PostgreSQL client support for the Python runtime
-- Access to the MusicBrainz API
+- Docker
+- Docker Compose
+- Python 3.12+ for local Python tooling
+- Network access to the MusicBrainz API
 
-The relevant runtime definitions are in the Compose files.
-
-Start the environment as:
+The current local Compose startup command is:
 
 ```bash
 docker compose -f docker-compose.local.yml up --build
 ```
 
-The stack already mounts project code into the Airflow and Spark services. The Airflow entrypoint is `entrypoint.sh`, which waits for Postgres, runs `airflow db migrate`, and creates a default admin user.
+Airflow is available through the webserver port configured in Compose.
 
-Once the containers are running, the DAGs can be observed through the Airflow UI at the webserver port declared in Compose: `8082` is mapped to `8080` in the webserver container.
+The project mounts the repository into the relevant containers, so the DAGs and scripts are available inside the runtime environment.
 
-The database can be reached through pgAdmin at port `5050` or directly at the host/ports declared in Compose (`5432` for the Airflow metadata database and `5434` for the ETL warehouse).
+## Running Individual Utilities
 
-## Running the Pipeline
+The generic utilities expose parameterized command-line interfaces.
 
-The expected pipeline entrypoint is the Airflow DAG `catalog_core_v1_landing` followed by the sanitised and curation DAGs.
+### Generate a batch
 
-Manual execution is mostly shell-driven. Examples from the repository are:
+```bash
+python generic_scripts/batch_id_generation.py <source_system> <phase_name>
+```
+
+Example:
 
 ```bash
 python generic_scripts/batch_id_generation.py cv1 landing
-python ingestion/catalog_core_v1/ingestion_artists_etl_landing.py
-python generic_scripts/load_tables_landing.py artists landing lnd_artists cv1
-python generic_scripts/load_tables_landing.py releases landing lnd_releases cv1
-python generic_scripts/load_tables_landing.py urls landing lnd_urls cv1
-python generic_scripts/landing_anr.py artists landing lnd_artists cv1
-python generic_scripts/sanitised_anr.py landing lnd_artists sanitised san_artists cv1 group1
-python generic_scripts/batch_log_insertion.py group1 cv1
 ```
 
-Those commands are the pieces exposed in the repository. The Airflow DAG wires them in a specific task order.
+### Load a landing table
 
-## Key Engineering Decisions
+```bash
+python generic_scripts/load_tables_landing.py \
+    <source_name> \
+    <schema_name> \
+    <table_name> \
+    <source_system>
+```
 
-There are a few concrete design decisions visible in the code:
+Example:
 
-- The data is intentionally staged by source phases. The pipeline records `landing`, `sanitised`, and `curated` as separate database layers.
-- The landing layer stores full API payloads in `JSONB`/JSON files. That preserves the original response shape before flattening it.
-- Every pipeline run is tied to a `etl_batch_id`. The `audit.batch_log` table is the ledger for that run.
-- The code tries to enforce row-level reconciliation through row counts between successive layers. Those counts are persisted in `audit.recon_log`.
-- The Airflow DAG is responsible for sequencing operations and external process calls rather than doing transformation itself. Spark handles the flattening.
-- The project keeps raw files around long enough to support reloading but not indefinitely. `landing_archival.py` removes older files.
+```bash
+python generic_scripts/load_tables_landing.py artists landing lnd_artists cv1
+```
 
-## Things to Know
+### Landing reconciliation
 
-If you are joining this project, the main things worth knowing are:
+```bash
+python generic_scripts/landing_anr.py \
+    <source_name> \
+    <schema_name> \
+    <table_name> \
+    <source_system>
+```
 
-- The shape of the current implementation is `cv1` and it is MusicBrainz-oriented.
-- Artist, release, and URL entities are the only live landing payloads currently wired through the landing DAG.
-- The recordings entity exists in the SQL and raw data tree but is not actively orchestrated through the main DAG.
-- `curation` is at a very early state. The active curated output is only the artist discography summary.
-- The codebase is not using a migration framework or a real DBT build. The warehouse schema is defined by SQL files and manual procedural scripts.
-- There are no meaningful Python tests in the `tests/` directory; the repository’s current test coverage is effectively empty.
+### Sanitized reconciliation
 
-## Known Limitations / TODOs
+```bash
+python generic_scripts/sanitised_anr.py \
+    <landing_schema> \
+    <landing_table> \
+    <sanitised_schema> \
+    <sanitised_table> \
+    <source_system> \
+    <group_name>
+```
 
-This project is a learning and exploration repository, and a number of gaps are visible in the implementation.
+### Batch-log update after reconciliation
 
-- The database connection is hardcoded and uses shared credentials in source files. This is fine for a local containerised project, but it is not a security-forward setup.
-- The landing table DDL and the runtime loading logic do not appear to be fully aligned on the presence of the `etl_batch_id` column. The serialised Python helpers assume this column may exist, but the simple SQL file does not declare it for landing tables.
-- The recordings pipeline is incomplete: the SQL includes a landing and sanitised table shape for recordings, and raw files are present, but there is no active orchestration path for that entity.
-- The curation layer has a placeholder `cur_label_release_summary.py` that is not used in a meaningful way.
-- There is no live evidence of the database being connected to the current workspace session. The Compose runtime may need to be started before the database can be inspected.
-- The repository’s tests folder is only a placeholder and does not carry executable validation.
+```bash
+python generic_scripts/batch_log_insertion.py \
+    <group_name> \
+    <source_system>
+```
+
+These utilities are intentionally parameterized. When a second entity group or another source is introduced, the expected approach is to pass the new source/table/group values rather than create a separate copy of the generic utility.
+
+## Current Implementation
+
+The current repository has working implementations for:
+
+- MusicBrainz API ingestion
+- Raw JSON persistence
+- Batch ID generation
+- Landing database loading
+- Landing reconciliation
+- Raw-file archival
+- Spark-based artist cleansing
+- Spark-based release cleansing
+- Spark-based URL cleansing
+- Sanitized reconciliation
+- Batch-level audit updates
+- Artist discography curation
+- Dockerized Airflow, PostgreSQL, Spark, and pgAdmin
+
+The current active data path is primarily:
+
+```text
+Artists
+Releases
+URLs
+```
+
+Recordings are present in parts of the data model but are not currently wired through the active end-to-end DAGs.
+
+## Current Pipeline Dependencies
+
+The current landing DAG follows this order:
+
+```text
+start
+  |
+  v
+batch_id_generation
+  |
+  v
+ingest_artist_data
+  |
+  v
+load_artist_data
+  |
+  v
+load_release_data
+  |
+  v
+load_urls_data
+  |
+  v
+landing_anr_artist
+  |
+  v
+landing_anr_releases
+  |
+  v
+landing_anr_urls
+  |
+  v
+landing_archival
+  |
+  v
+end
+```
+
+The sanitized DAG runs the three active Spark cleansing jobs in parallel:
+
+```text
+                    +--> clean_artist_data --> sanitised_anr_artist --+
+start -->           |                                                 |
+                    +--> clean_release_data -> sanitised_anr_releases +--> batch_log_insertion --> end
+                    |                                                 |
+                    +--> clean_urls_data ----> sanitised_anr_urls ---+
+```
+
+The curation DAG currently has a single active Spark task:
+
+```text
+start
+  |
+  v
+cur_artist_discography_summary
+  |
+  v
+end
+```
+
+## Important Engineering Considerations
+
+### Keep generic utilities generic
+
+The shared utilities under `generic_scripts/` should operate on parameters such as:
+
+```text
+source_system
+phase_name
+schema_name
+table_name
+group_name
+```
+
+rather than embedding assumptions about a particular entity.
+
+Source-specific behavior belongs in the corresponding ingestion, cleansing, or curation package.
+
+### Batch IDs are the cross-stage identifier
+
+When adding a new processing stage, ensure the current batch ID is propagated and used consistently.
+
+Do not generate unrelated batch IDs for every table within the same phase unless that behavior is intentionally required.
+
+### Grouping is a pipeline concern
+
+A group can represent a set of tables that should be reconciled or audited together.
+
+For example:
+
+```text
+group1:
+  artists
+  releases
+  urls
+```
+
+A different pipeline can define another group without changing the generic reconciliation implementation.
+
+### Landing preserves source payloads
+
+The landing layer should retain the source payload rather than applying the full business transformation immediately.
+
+The Spark cleansing layer is responsible for converting nested JSON into the structured sanitized model.
+
+### Do not treat filenames as the batch identifier
+
+Raw files are date/timestamp based, while the audit framework uses `etl_batch_id`.
+
+The batch ID is the authoritative execution identifier for audit and reconciliation.
+
+## Known Limitations
+
+The current repository still has areas that require further development:
+
+- The active pipeline is focused on a limited set of MusicBrainz entities.
+- Recordings are not currently wired through the active landing and sanitized DAGs.
+- The second curation path for label/release summaries is incomplete.
+- The test suite is currently minimal.
+- Database credentials are currently present in local configuration/source and should be externalized.
+- Database bootstrap and runtime schema assumptions should remain aligned with the SQL definitions.
+- The current DAGs are separate by phase; an explicit cross-DAG dependency mechanism is not currently shown.
+- The current pipeline is batch-oriented rather than streaming.
+- Monitoring and alerting are primarily based on Airflow task state and application logging.
+- The project does not currently provide a mature CI/CD workflow.
+- Spark is used for active cleansing/curation, but the transformation layer is still relatively small.
 
 ## Live Showcase
 
-> TODO: Add live showcase details.
+> TODO: Finalize the live showcase.
 
-Potential items worth demonstrating:
+A useful demonstration should show the system as a connected pipeline rather than individual scripts.
 
-- [ ] End-to-end execution from API fetch to landing DB write
-- [ ] The landing-to-sanitised reconciliation pass
-- [ ] The curated artist discography summary table
-- [ ] Airflow DAG state and task ordering
-- [ ] raw JSON and batch ID generation
-- [ ] audit records in `audit.batch_log` and `audit.recon_log`
-- [ ] Spark parsing of nested MusicBrainz payload structures
+Suggested walkthrough:
+
+- [ ] Start the Docker environment
+- [ ] Show the Airflow DAGs
+- [ ] Generate an ETL batch ID
+- [ ] Run/trigger the landing pipeline
+- [ ] Show MusicBrainz extraction
+- [ ] Show timestamped raw JSON
+- [ ] Show landing tables and stored JSONB payloads
+- [ ] Demonstrate landing ANR
+- [ ] Show the batch status in `audit.batch_log`
+- [ ] Run the Spark cleansing stage
+- [ ] Show sanitized tables
+- [ ] Demonstrate sanitized ANR
+- [ ] Show `audit.recon_log`
+- [ ] Show batch-level reconciliation status
+- [ ] Run the curation DAG
+- [ ] Query `curated.cur_artist_discography_summary`
+- [ ] Demonstrate a failure/mismatch scenario and show how audit status changes
+
+For a team presentation, the most useful story is the movement of one batch through all layers and how the same batch ID connects the processing and audit records.
 
 ## Future Improvements
 
-The next useful improvements would be:
+Potential improvements based on the current implementation include:
 
-- Replace the hardcoded Postgres credentials with environment-driven configuration and secrets management.
-- Add a real integration or end-to-end validation layer around the main DAGs.
-- Expand the active curation model beyond the author-only summary and implement the label/release summary path.
-- Finish the recordings and perhaps other source entities so they land, clean, and reconcile in the same way as the current three active domains.
-- Improve auditability with a real run-time status dashboard and stronger observability around Spark and Airflow logging.
-- Document a proper initial database bootstrap story that creates the schemas and tables consistently with the scripts that later assume them.
+### Pipeline extensibility
+
+- Add more entity groups using the existing generic loading and reconciliation utilities.
+- Add recordings to the active ingestion, cleansing, and reconciliation flow.
+- Standardize source-specific configuration instead of embedding sample selections in ingestion code.
+
+### Data quality
+
+- Add schema and nullability validation before database writes.
+- Add key/relationship checks in addition to row-count reconciliation.
+- Add duplicate detection where required.
+- Add automated data-quality tests for each layer.
+
+### Audit and observability
+
+- Add a consistent run-level monitoring view.
+- Add richer error details and execution metrics.
+- Add alerting for reconciliation failures.
+- Track execution duration and per-entity counts.
+
+### Configuration
+
+- Move database credentials and operational settings to environment-based configuration.
+- Add a safe `.env.example` or equivalent configuration template.
+- Separate development configuration from shared runtime configuration.
+
+### Testing and delivery
+
+- Add unit tests for reusable utilities.
+- Add integration tests against PostgreSQL.
+- Add DAG validation tests.
+- Add CI checks for Python, SQL, and Airflow DAG parsing.
+- Add repeatable local test data.
+
+## Current vs Planned
+
+| Area | Current state |
+|---|---|
+| MusicBrainz ingestion | Implemented |
+| Raw JSON storage | Implemented |
+| Landing layer | Implemented for active entities |
+| Landing reconciliation | Implemented |
+| Batch tracking | Implemented |
+| Spark cleansing | Implemented for artists, releases, and URLs |
+| Sanitized layer | Implemented for active entities |
+| Sanitized reconciliation | Implemented |
+| Curated artist summary | Implemented |
+| Label/release curated summary | Incomplete |
+| Recordings end-to-end flow | Incomplete |
+| Automated test coverage | Limited |
+| CI/CD | Not currently implemented |
+| Production monitoring | Not currently implemented |
+| Streaming processing | Not implemented |
+
+## Working With the Repository
+
+When adding a new pipeline or entity group, keep the separation between:
+
+```text
+Source-specific code
+    ingestion/
+    cleansing/
+    curation/
+
+Shared pipeline utilities
+    generic_scripts/
+
+Orchestration
+    airflow/dags/
+
+Data model
+    sql/
+
+Runtime
+    docker-compose*.yml
+```
+
+A new entity should normally reuse the existing generic batch, loading, archival, and reconciliation utilities where their behavior applies.
+
+This keeps the repository maintainable as the number of entities and pipeline groups increases without creating duplicate versions of the same operational logic.
+
+## References
+
+- MusicBrainz API documentation: https://musicbrainz.org/doc/MusicBrainz_API
+- Airflow DAGs: `airflow/dags/`
+- Shared ETL utilities: `generic_scripts/`
+- Source ingestion: `ingestion/`
+- Spark transformations: `cleansing/`
+- Curated transformations: `curation/`
+- Database definitions: `sql/`
