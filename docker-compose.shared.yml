@@ -74,6 +74,7 @@ services:
       - ./generic_scripts:/opt/project/generic_scripts     
       - ./database:/opt/project/database
       - ./cleansing:/opt/project/cleansing
+      - ./curation:/opt/project/curation
       - ./spark:/opt/project/spark
     ports:
       - "8082:8080"
@@ -114,6 +115,7 @@ services:
       - ./generic_scripts:/opt/project/generic_scripts     
       - ./database:/opt/project/database
       - ./cleansing:/opt/project/cleansing
+      - ./curation:/opt/project/curation
       - ./spark:/opt/project/spark
 
     command: scheduler

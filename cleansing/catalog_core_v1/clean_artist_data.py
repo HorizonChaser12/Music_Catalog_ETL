@@ -64,20 +64,36 @@ def clean_artist_data(artists_df, logger_obj):
               StructField("id", StringType()),
               StructField("name",StringType())
             ])
-        )
+        ),
+        StructField("life-span", 
+            StructType([
+                StructField("begin", StringType()),
+                StructField("end", StringType()),
+                StructField("ended", StringType())
+            ])
+        ),
+        StructField("disambiguation", StringType()),
+        StructField("sort-name", StringType()),
         ])
-        artists_df = artists_df.withColumn("artists_json" , from_json("payload",artists_schema)) 
+        
+        artists_df = artists_df.withColumn("artists_json", from_json("payload", artists_schema)) 
 
         sanitised_artists = artists_df.select(
-            artists_df.artists_json.id.alias("artist_id"),
+            artists_df["artists_json"]["id"].alias("artist_id"),
             artists_df["artists_json"]["name"].alias("artist_name"),
-            artists_df.artists_json.gender.alias("gender"),
-            artists_df.artists_json.country.alias("country"),
-            artists_df.artists_json.type.alias("type"),
-            artists_df.artists_json.area.id.alias("area_id"),
+            artists_df["artists_json"]["sort-name"].alias("sort_name"), 
+            artists_df["artists_json"]["gender"].alias("gender"),
+            artists_df["artists_json"]["country"].alias("country"),
+            artists_df["artists_json"]["type"].alias("type"),
+            artists_df["artists_json"]["disambiguation"].alias("disambiguation"), 
+            artists_df["artists_json"]["area"]["id"].alias("area_id"),
             artists_df["artists_json"]["area"]["name"].alias("area_name"),
+            artists_df["artists_json"]["life-span"]["begin"].alias("life_span_begin"), 
+            artists_df["artists_json"]["life-span"]["end"].alias("life_span_end"), 
+            artists_df["artists_json"]["life-span"]["ended"].alias("life_span_ended"),
             "created_at",
-            "updated_at"
+            "updated_at",
+            "etl_batch_id",
         )
         logger_obj.info("Successfully cleansed Artist Data..")
         logger_obj.info(f"Count = {sanitised_artists.count()}")
@@ -92,6 +108,7 @@ def write_artist_table(artist_df, schema_name, table_name):
     logger_basic.info(f"writing Cleansed data into {table_name}")
     
     write_table(artist_df,table_name)
+        
 
 def main():
     # Initialize Spark session inside main() so it's only created when script is run directly

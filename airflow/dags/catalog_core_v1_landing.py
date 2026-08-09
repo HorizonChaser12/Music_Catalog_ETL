@@ -38,7 +38,7 @@ with DAG(
     )
     ingest_data = BashOperator(
         task_id="ingest_artist_data",
-        bash_command="python /opt/project/ingestion/ingestion_artists_etl_landing.py",
+        bash_command="python /opt/project/ingestion/catalog_core_v1/ingestion_artists_etl_landing.py",
     )
     load_data_artist = BashOperator(
         task_id="load_artist_data",
@@ -48,9 +48,9 @@ with DAG(
         task_id="load_release_data",
         bash_command=f"python /opt/project/generic_scripts/load_tables_landing.py releases landing lnd_releases cv1",
     )
-    load_data_release_groups = BashOperator(
-        task_id = "load_release_groups_data",
-        bash_command=f"python /opt/project/generic_scripts/load_tables_landing.py release_groups landing lnd_release_groups cv1",
+    load_data_urls = BashOperator(
+        task_id = "load_urls_data",
+        bash_command=f"python /opt/project/generic_scripts/load_tables_landing.py urls landing lnd_urls cv1",
     )
     landing_anr_artist = BashOperator(
         task_id = "landing_anr_artist",
@@ -60,13 +60,13 @@ with DAG(
         task_id = "landing_anr_releases",
         bash_command=f"python /opt/project/generic_scripts/landing_anr.py releases landing lnd_releases cv1",
     )
-    landing_anr_release_groups = BashOperator(
-        task_id = "landing_anr_release_groups",
-        bash_command=f"python /opt/project/generic_scripts/landing_anr.py release_groups landing lnd_release_groups cv1",
+    landing_anr_urls = BashOperator(
+        task_id = "landing_anr_urls",
+        bash_command=f"python /opt/project/generic_scripts/landing_anr.py urls landing lnd_urls cv1",
     )
-    landing_archival = BashOperator(
-        task_id = "landing_archival_artists",
-        bash_command=f"python /opt/project/generic_scripts/landing_archival.py artists,releases,release_groups",
+    landing_archival_all = BashOperator(
+        task_id = "landing_archival",
+        bash_command=f"python /opt/project/generic_scripts/landing_archival.py artists,releases,urls",
     )
     end = EmptyOperator(
         task_id="end"
@@ -74,4 +74,4 @@ with DAG(
     
 
     #dependencies
-    start >> batch_id_generation >> ingest_data >> load_data_artist >> load_data_release >> load_data_release_groups >> landing_anr_artist >> landing_anr_release >> landing_anr_release_groups >> landing_archival >> end
+    start >> batch_id_generation >> ingest_data >> load_data_artist >> load_data_release >> load_data_urls >> landing_anr_artist >> landing_anr_release >> landing_anr_urls >> landing_archival_all >> end

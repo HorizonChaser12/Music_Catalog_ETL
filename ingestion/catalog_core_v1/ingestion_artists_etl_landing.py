@@ -2,7 +2,7 @@ import logging
 from typing import List
 import random
 import string
-from musicbrainz_client import (
+from generic_scripts.utils.musicbrainz_client import (
     make_request,
     save_json
 )
@@ -47,7 +47,7 @@ def discover_artists():
     return candidates
 
 
-def fetch_artists(sample_size=10) :
+def fetch_artists(sample_size=random.randint(0,30)) :
     """_summary_
         Fetches sample_sized artists from the discovered artists and stores locally
        Returns:
@@ -75,6 +75,7 @@ def fetch_releases(artist_list):
         list : returns a list of releases
     """
     releases = []
+    
     try:
         for artist in artist_list:
             artist_name = artist["name"]
@@ -102,42 +103,46 @@ def fetch_releases(artist_list):
 
     return releases
 
-
-def fetch_release_group(release_list:List[dict]):
-    """Fetch release-group metadata from release MBIDs."""
-    release_groups = []
-    seen_release_group_ids = set()
-    try:
-        for release in release_list:
-            release_group = release.get("release-group")
-            if not release_group:
-                logger.warning("No release-group found for release %s", release_group)
-                continue
-
-            rg_id = release_group.get("id")
-            if rg_id in seen_release_group_ids:
-                logger.debug("Skipping duplicate release-group %s for release %s", release_group, rg_id)
-                continue
-
-            rg_data = fetch_data(endpoint=f"release-group/{rg_id}", params={"fmt": "json"}, entity=f"release-group {rg_id}")
-            if rg_data:
-                release_groups.append(rg_data)
-                seen_release_group_ids.add(rg_id)
-            else:
-                logger.warning("Failed to fetch release-group %s", rg_id)
-
-    except Exception:
-        logger.exception("Error fetching release groups")
+def fetch_urls(releases):
+    """Fetch URL relations for a list of releases and save them to raw storage."""
+    urls = []
 
     try:
-        save_json(release_groups, "release_groups", "release_groups")
-        logger.info("Saved release group data successfully")
-        logger.info("Fetched %s unique release groups", len(release_groups))
-    except Exception:
-        logger.exception("Error saving release groups data")
+        for release in releases:
+            try:
+                release_id = release.get("id")
+                if not release_id:
+                    logger.warning("Skipping release without id: %s", release)
+                    continue
 
-    return release_groups
+                logger.info("Fetching urls for release %s", release_id)
+                data = make_request(
+                    endpoint=f"release/{release_id}",
+                    params={
+                        "inc": "url-rels",
+                        "fmt": "json"
+                    }
+                )
 
+                if data:
+                    urls.append(data)
+                else:
+                    logger.warning("No urls returned for release %s", release_id)
+
+            except Exception as exc:
+                logger.exception("Failed to fetch urls for release %s", release)
+                continue
+        try:   
+            save_json(urls, "urls", "urls")
+            logger.info("Saved url data successfully")
+        except Exception:
+            logger.exception("Error saving url data")
+        return urls
+
+    except Exception as exc:
+        logger.exception("Failed to fetch urls")
+        return []
+ 
 def main():
     # 1. Fetch Artists
     logger.info(f"\n.......Artist Data API fetch started.......")
@@ -150,11 +155,11 @@ def main():
         release_data = fetch_releases(artist_data)
         logger.info(f"\n.......Release Data API fetch completed....... \n")
         
-    # 3. Fetch Releases_Groups 
+    # 3. Fetch urls 
     if release_data:
-        logger.info(f"\n.......Release_Groups Data API fetch started....... \n")
-        fetch_release_group(release_data)
-        logger.info(f"\n.......Release_Groups Data API fetch completed....... \n")
+        logger.info(f"\n.......URLs Data API fetch started....... \n")
+        fetch_urls(release_data)
+        logger.info(f"\n.......URLs Data API fetch completed....... \n")
 
     
 if __name__ == "__main__":

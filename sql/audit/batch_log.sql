@@ -1,5 +1,5 @@
 -- Batch Log Table for ETL Auditing
-CREATE TABLE IF NOT EXISTS batch_log (
+CREATE TABLE IF NOT EXISTS audit.batch_log (
     etl_batch_id VARCHAR(255) NOT NULL,
     phase_name VARCHAR(100) NOT NULL,
     source_system VARCHAR(100) NOT NULL,
